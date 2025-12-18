@@ -95,56 +95,47 @@ static __always_inline bool should_trace_event(struct file *file) {
     return true;
 }
 
-// Helper to get path from dentry: captures immediate parent + filename
-// Format: "parent_dir/filename" or just "filename" if at mount root
+// Helper to get path from dentry with parent directory
+// Format in buffer: [parent:0-62][/:63][filename:64-255]
+// Userspace parses the fixed format to reconstruct "parent/filename"
 static __always_inline void get_dentry_path(struct dentry *dentry, char *buf, int size) {
-    if (!dentry || !buf || size <= 0) {
+    if (!dentry || !buf || size < 128) {
         if (buf && size > 0) buf[0] = '\0';
         return;
     }
 
+    // Initialize buffer with null terminators at key positions
+    buf[0] = '\0';
+    buf[63] = '\0';
+    buf[64] = '\0';
+
     // Get parent dentry
     struct dentry *parent = BPF_CORE_READ(dentry, d_parent);
+    int has_parent = 0;
 
-    // Check if parent exists and is different (not at root)
-    int has_parent = (parent && parent != dentry);
-
-    // Check grandparent to see if parent is meaningful
-    struct dentry *grandparent = NULL;
-    if (has_parent) {
-        grandparent = BPF_CORE_READ(parent, d_parent);
-        // If grandparent equals parent, parent is root - don't include it
-        if (grandparent == parent) {
-            has_parent = 0;
+    if (parent && parent != dentry) {
+        // Check grandparent to see if parent is the mount root
+        struct dentry *grandparent = BPF_CORE_READ(parent, d_parent);
+        if (grandparent && grandparent != parent) {
+            has_parent = 1;
         }
     }
 
+    // Write parent name at offset 0 (max 63 chars)
     if (has_parent) {
-        // Write parent name first (at offset 0, max 64 bytes)
         const unsigned char *pname = BPF_CORE_READ(parent, d_name.name);
         if (pname) {
-            int plen = bpf_probe_read_kernel_str(buf, 64, pname);
-            if (plen > 1 && plen < 64) {
-                // Add slash after parent name
-                buf[plen - 1] = '/';
-                // Write filename after slash (at fixed offset)
-                const unsigned char *fname = BPF_CORE_READ(dentry, d_name.name);
-                if (fname) {
-                    bpf_probe_read_kernel_str(buf + plen, size - plen, fname);
-                } else {
-                    buf[plen] = '\0';
-                }
-                return;
-            }
+            bpf_probe_read_kernel_str(buf, 63, pname);
         }
     }
 
-    // No parent or parent read failed - just write filename
+    // Write separator at fixed offset 63
+    buf[63] = '/';
+
+    // Write filename at fixed offset 64 (max 192 chars)
     const unsigned char *fname = BPF_CORE_READ(dentry, d_name.name);
     if (fname) {
-        bpf_probe_read_kernel_str(buf, size, fname);
-    } else {
-        buf[0] = '\0';
+        bpf_probe_read_kernel_str(buf + 64, 192, fname);
     }
 }
 

@@ -247,10 +247,23 @@ func parseEvent(data []byte) (*types.FileEvent, error) {
     buf.Read(comm)
     event.Comm = nullTerminatedString(comm)
 
-    // Read filename (256 bytes, null-terminated)
-    filename := make([]byte, 256)
-    buf.Read(filename)
-    event.Filename = nullTerminatedString(filename)
+    // Read filename buffer (256 bytes) with fixed format:
+    // [parent:0-62][/:63][filename:64-255]
+    filenameBuf := make([]byte, 256)
+    buf.Read(filenameBuf)
+
+    // Parse fixed format: parent at 0-62, separator at 63, filename at 64+
+    parent := nullTerminatedString(filenameBuf[:63])
+    filename := nullTerminatedString(filenameBuf[64:])
+
+    // Reconstruct path: "parent/filename" or just "filename"
+    if parent != "" && filename != "" {
+        event.Filename = parent + "/" + filename
+    } else if filename != "" {
+        event.Filename = filename
+    } else {
+        event.Filename = parent  // Fallback
+    }
 
     // Convert timestamp to time.Time
     // bpf_ktime_get_ns() returns nanoseconds since boot, not epoch
