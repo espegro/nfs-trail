@@ -95,120 +95,57 @@ static __always_inline bool should_trace_event(struct file *file) {
     return true;
 }
 
-// Maximum bytes per path component (directory/file name)
-#define MAX_NAME_LEN 48
-
-// Helper to get relative path from dentry (up to 4 parent directories)
-// Builds path like: dir3/dir2/dir1/filename
+// Helper to get path from dentry: captures immediate parent + filename
+// Format: "parent_dir/filename" or just "filename" if at mount root
 static __always_inline void get_dentry_path(struct dentry *dentry, char *buf, int size) {
     if (!dentry || !buf || size <= 0) {
         if (buf && size > 0) buf[0] = '\0';
         return;
     }
 
-    // Get pointers to each level
-    struct dentry *d0 = dentry;
-    struct dentry *d1 = BPF_CORE_READ(d0, d_parent);
-    struct dentry *d2 = NULL;
-    struct dentry *d3 = NULL;
-    struct dentry *d4 = NULL;
+    // Get parent dentry
+    struct dentry *parent = BPF_CORE_READ(dentry, d_parent);
 
-    if (d1 && d1 != d0) {
-        d2 = BPF_CORE_READ(d1, d_parent);
-        if (d2 && d2 != d1) {
-            d3 = BPF_CORE_READ(d2, d_parent);
-            if (d3 && d3 != d2) {
-                d4 = BPF_CORE_READ(d3, d_parent);
+    // Check if parent exists and is different (not at root)
+    int has_parent = (parent && parent != dentry);
+
+    // Check grandparent to see if parent is meaningful
+    struct dentry *grandparent = NULL;
+    if (has_parent) {
+        grandparent = BPF_CORE_READ(parent, d_parent);
+        // If grandparent equals parent, parent is root - don't include it
+        if (grandparent == parent) {
+            has_parent = 0;
+        }
+    }
+
+    if (has_parent) {
+        // Write parent name first (at offset 0, max 64 bytes)
+        const unsigned char *pname = BPF_CORE_READ(parent, d_name.name);
+        if (pname) {
+            int plen = bpf_probe_read_kernel_str(buf, 64, pname);
+            if (plen > 1 && plen < 64) {
+                // Add slash after parent name
+                buf[plen - 1] = '/';
+                // Write filename after slash (at fixed offset)
+                const unsigned char *fname = BPF_CORE_READ(dentry, d_name.name);
+                if (fname) {
+                    bpf_probe_read_kernel_str(buf + plen, size - plen, fname);
+                } else {
+                    buf[plen] = '\0';
+                }
+                return;
             }
         }
     }
 
-    int len;
-    // Fixed offsets for each component to satisfy verifier
-    // Layout: [comp3:48][comp2:48][comp1:48][filename:112] = 256 bytes max
-
-    int off0 = 0;    // Start of component 3 (deepest parent)
-    int off1 = 48;   // Start of component 2
-    int off2 = 96;   // Start of component 1 (immediate parent)
-    int off3 = 144;  // Start of filename
-
-    // Track what we actually have
-    int have_d3 = 0, have_d2 = 0, have_d1 = 0;
-
-    // Write component 3 (d3's name) if d4 exists
-    if (d4 && d4 != d3) {
-        const unsigned char *n = BPF_CORE_READ(d3, d_name.name);
-        if (n) {
-            len = bpf_probe_read_kernel_str(buf + off0, MAX_NAME_LEN, n);
-            if (len > 1) have_d3 = len - 1;
-        }
-    }
-
-    // Write component 2 (d2's name) if d3 exists
-    if (d3 && d3 != d2) {
-        const unsigned char *n = BPF_CORE_READ(d2, d_name.name);
-        if (n) {
-            len = bpf_probe_read_kernel_str(buf + off1, MAX_NAME_LEN, n);
-            if (len > 1) have_d2 = len - 1;
-        }
-    }
-
-    // Write component 1 (d1's name) if d2 exists
-    if (d2 && d2 != d1) {
-        const unsigned char *n = BPF_CORE_READ(d1, d_name.name);
-        if (n) {
-            len = bpf_probe_read_kernel_str(buf + off2, MAX_NAME_LEN, n);
-            if (len > 1) have_d1 = len - 1;
-        }
-    }
-
-    // Write filename (d0's name)
-    int have_d0 = 0;
-    const unsigned char *fname = BPF_CORE_READ(d0, d_name.name);
+    // No parent or parent read failed - just write filename
+    const unsigned char *fname = BPF_CORE_READ(dentry, d_name.name);
     if (fname) {
-        len = bpf_probe_read_kernel_str(buf + off3, 112, fname);
-        if (len > 1) have_d0 = len - 1;
+        bpf_probe_read_kernel_str(buf, size, fname);
+    } else {
+        buf[0] = '\0';
     }
-
-    // Now compact the path: move components to beginning with slashes
-    // This is a simple approach - just copy what we have
-    int pos = 0;
-
-    if (have_d3 > 0 && pos + have_d3 + 1 < size) {
-        // Component already at off0, copy to pos if different
-        if (pos != off0) {
-            for (int i = 0; i < have_d3 && i < MAX_NAME_LEN && pos + i < size; i++) {
-                buf[pos + i] = buf[off0 + i];
-            }
-        }
-        pos += have_d3;
-        if (pos < size - 1) buf[pos++] = '/';
-    }
-
-    if (have_d2 > 0 && pos + have_d2 + 1 < size) {
-        for (int i = 0; i < have_d2 && i < MAX_NAME_LEN && pos + i < size; i++) {
-            buf[pos + i] = buf[off1 + i];
-        }
-        pos += have_d2;
-        if (pos < size - 1) buf[pos++] = '/';
-    }
-
-    if (have_d1 > 0 && pos + have_d1 + 1 < size) {
-        for (int i = 0; i < have_d1 && i < MAX_NAME_LEN && pos + i < size; i++) {
-            buf[pos + i] = buf[off2 + i];
-        }
-        pos += have_d1;
-        if (pos < size - 1) buf[pos++] = '/';
-    }
-
-    if (have_d0 > 0 && pos + have_d0 < size) {
-        for (int i = 0; i < have_d0 && i < 112 && pos + i < size; i++) {
-            buf[pos + i] = buf[off3 + i];
-        }
-        pos += have_d0;
-    }
-
-    if (pos < size) buf[pos] = '\0';
 }
 
 
