@@ -180,6 +180,14 @@ eBPF kprobes (kernel) --> Ring Buffer --> Go userspace --> JSON output
 - Memory: ~20MB resident
 - Log reduction with aggregation: 10-100x
 
+## Limitations
+
+**Path Resolution**: Only the filename (basename) is captured in eBPF due to kernel stack limits (512 bytes) and verifier constraints. The full path shown in logs is `mount_point + filename`. Subdirectory paths are not captured.
+
+Example: A file at `/mnt/nfs/subdir/deep/file.txt` will be logged as `/mnt/nfs/file.txt`.
+
+For full path auditing, consider supplementing with auditd or using inode-based correlation.
+
 ## License
 
 GPL-2.0 (required for eBPF)
