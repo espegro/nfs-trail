@@ -1,0 +1,29 @@
+[Unit]
+Description=NFS File Access Logging Daemon
+Documentation=https://github.com/espen/nfs-trail
+After=network.target remote-fs.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/nfs-trail -config /etc/nfs-trail/nfs-trail.yaml
+Restart=on-failure
+RestartSec=5s
+
+# Capabilities
+CapabilityBoundingSet=CAP_BPF CAP_PERFMON CAP_NET_ADMIN CAP_SYS_RESOURCE CAP_DAC_READ_SEARCH
+AmbientCapabilities=CAP_BPF CAP_PERFMON CAP_NET_ADMIN CAP_SYS_RESOURCE CAP_DAC_READ_SEARCH
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/var/log/nfs-trail
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=nfs-trail
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,106 @@
+# NFS Trail Configuration
+
+# NFS mounts to monitor
+mounts:
+  # Monitor all NFS mounts
+  all: true
+
+  # Or specify specific mount points (uncomment to use)
+  # all: false
+  # paths:
+  #   - /mnt/nfs-storage
+  #   - /data/shared
+
+# UID/GID and operation filtering
+filters:
+  # Include specific UIDs (empty = all)
+  include_uids: []
+
+  # Exclude specific UIDs
+  exclude_uids:
+    - 0       # root
+    - 65534   # nobody
+
+  # UID ranges to include
+  include_uid_ranges:
+    - min: 1000
+      max: 60000
+
+  # UID ranges to exclude
+  exclude_uid_ranges: []
+
+  # Exclude specific operations (reduce noise)
+  # Available: read, write, stat, chmod, chown, rename, delete, mkdir, rmdir, symlink, link, setxattr
+  exclude_operations: []
+  # Example to exclude stat operations:
+  # exclude_operations:
+  #   - stat
+
+  # Include only specific operations (if set, only these are logged)
+  include_operations: []
+  # Example to only log security-relevant operations:
+  # include_operations:
+  #   - chmod
+  #   - chown
+  #   - delete
+  #   - rename
+
+# Event aggregation settings
+aggregation:
+  # Enable event aggregation
+  enabled: true
+
+  # Time window for grouping events (milliseconds)
+  window_ms: 500
+
+  # Max files to list individually before summarizing
+  max_file_list: 10
+
+  # Minimum events to trigger aggregation
+  min_event_count: 3
+
+# Output configuration
+output:
+  # Output type: file, stdout, journald
+  type: stdout
+
+  # File output settings (used when type=file)
+  file:
+    path: /var/log/nfs-trail/events.json
+    # Rotate settings
+    max_size_mb: 100
+    max_backups: 10
+    max_age_days: 30
+    compress: true
+
+  # ECS format compliance
+  ecs:
+    version: "8.17.0"
+    # Additional ECS fields to include
+    tags: ["nfs", "filesystem", "audit"]
+
+# Performance tuning
+performance:
+  # Ring buffer size (bytes) for eBPF to userspace communication
+  ringbuffer_size: 262144  # 256KB
+
+  # Event channel buffer size (number of events)
+  # Increase this for high I/O environments
+  channel_buffer_size: 1000
+
+  # Maximum events per second (0 = unlimited)
+  # Set this to prevent overwhelming the system under extreme load
+  max_events_per_sec: 0
+
+  # Print processing statistics every N seconds (0 = disabled)
+  stats_interval_sec: 60
+
+  # User/group name cache settings
+  cache:
+    size: 10000          # Maximum entries in LRU cache
+    ttl_seconds: 300     # 5 minutes
+
+# Logging (daemon's own logs, not NFS events)
+logging:
+  level: info  # debug, info, warn, error
+  output: stdout

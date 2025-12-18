@@ -1,0 +1,57 @@
+# Binaries (root directory only)
+/nfs-trail
+*.o
+
+# eBPF generated files
+internal/ebpf/*_bpfe*.go
+internal/ebpf/*_bpfe*.o
+internal/ebpf/bpf/*.o
+internal/ebpf/bpf/headers/vmlinux.h
+
+# Go build artifacts
+*.test
+*.out
+go.sum
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Temp files
+*.tmp
+*.temp
+/tmp/
+
+# Claude / AI assistant traces
+.claude/
+.aider*
+.cursor/
+.continue/
+CLAUDE.md
+.anthropic/
+*.claude
+*_claude*
+.ai/
+
+# Editor backups
+*.bak
+*.orig
+\#*\#
+
+# SELinux policy build artifacts
+nfs_trail.mod
+nfs_trail.pp
+*.te.bak
+
+# Test output
+/tmp/nfs-trail-*
