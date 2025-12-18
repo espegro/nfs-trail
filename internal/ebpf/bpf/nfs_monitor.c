@@ -95,19 +95,21 @@ static __always_inline bool should_trace_event(struct file *file) {
     return true;
 }
 
-// Helper to get path - just returns basename for now
-// Full path walking is too complex for eBPF verifier
-static __always_inline int get_dentry_path(struct dentry *dentry, char *buf, int size) {
-    if (!dentry || !buf || size <= 0)
-        return -1;
-
-    const unsigned char *name = BPF_CORE_READ(dentry, d_name.name);
-    if (!name) {
-        buf[0] = '\0';
-        return 0;
+// Helper to get filename from dentry
+// Note: Full path walking is not feasible in BPF due to stack limits and verifier constraints
+// Only basename is captured; mount point is prepended in userspace
+static __always_inline void get_dentry_path(struct dentry *dentry, char *buf, int size) {
+    if (!dentry || !buf || size <= 0) {
+        if (buf && size > 0) buf[0] = '\0';
+        return;
     }
 
-    return bpf_probe_read_kernel_str(buf, size, name);
+    const unsigned char *name = BPF_CORE_READ(dentry, d_name.name);
+    if (name) {
+        bpf_probe_read_kernel_str(buf, size, name);
+    } else {
+        buf[0] = '\0';
+    }
 }
 
 
