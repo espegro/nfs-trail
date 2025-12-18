@@ -95,27 +95,78 @@ static __always_inline bool should_trace_event(struct file *file) {
     return true;
 }
 
-// Helper to get full path from dentry by walking up the tree
-// Uses a simpler approach: just get basename for now, prepend mount point in userspace
+// Helper to get path from dentry by walking up the tree
+// Stores path components in reverse, then reverses in place
 static __always_inline int get_dentry_path(struct dentry *dentry, char *buf, int size) {
     if (!dentry || !buf || size <= 0)
         return -1;
 
-    // For now, just get the basename - full path resolution is complex in eBPF
-    // The mount point will be prepended in userspace
-    const unsigned char *name_ptr = BPF_CORE_READ(dentry, d_name.name);
-    if (!name_ptr) {
-        buf[0] = '\0';
+    // Initialize buffer
+    buf[0] = '\0';
+
+    // Collect path components (up to 8 levels to keep verifier happy)
+    struct dentry *dentries[8];
+    int depth = 0;
+
+    struct dentry *d = dentry;
+    #pragma unroll
+    for (int i = 0; i < 8; i++) {
+        if (!d)
+            break;
+        struct dentry *parent = BPF_CORE_READ(d, d_parent);
+        if (!parent || parent == d)
+            break;
+        dentries[depth] = d;
+        depth++;
+        d = parent;
+    }
+
+    if (depth == 0) {
+        // Just get basename
+        const unsigned char *name = BPF_CORE_READ(dentry, d_name.name);
+        if (name)
+            bpf_probe_read_kernel_str(buf, size, name);
         return 0;
     }
 
-    int len = bpf_probe_read_kernel_str(buf, size, name_ptr);
-    if (len < 0) {
-        buf[0] = '\0';
-        return 0;
+    // Build path from root to leaf
+    int pos = 0;
+
+    #pragma unroll
+    for (int i = 7; i >= 0; i--) {
+        if (i >= depth)
+            continue;
+
+        struct dentry *cur = dentries[i];
+        if (!cur)
+            continue;
+
+        const unsigned char *name = BPF_CORE_READ(cur, d_name.name);
+        if (!name)
+            continue;
+
+        // Add slash
+        if (pos < size - 1) {
+            buf[pos] = '/';
+            pos++;
+        }
+
+        // Read component name directly into buffer
+        char tmp[64];
+        int len = bpf_probe_read_kernel_str(tmp, sizeof(tmp), name);
+        if (len > 1) {
+            len--;  // exclude null terminator
+            // Bound len to avoid verifier complaints
+            if (len > 63) len = 63;
+            if (pos + len < size - 1) {
+                bpf_probe_read_kernel(buf + pos, len & 63, tmp);
+                pos += len;
+            }
+        }
     }
 
-    return len;
+    buf[pos] = '\0';
+    return pos;
 }
 
 
