@@ -4,6 +4,7 @@ import (
     "encoding/json"
     "fmt"
     "os"
+    "path/filepath"
     "strings"
 
     "github.com/espen/nfs-trail/internal/types"
@@ -23,6 +24,12 @@ func NewStdoutLogger() *StdoutLogger {
 
 // LogEvent writes a file event to stdout as JSON
 func (l *StdoutLogger) LogEvent(event *types.FileEvent) error {
+    // Build full path from mount point + filename
+    fullPath := event.Filename
+    if event.MountPoint != "" && event.Filename != "" {
+        fullPath = filepath.Join(event.MountPoint, event.Filename)
+    }
+
     // Create a simple JSON representation
     output := map[string]interface{}{
         "@timestamp": event.Timestamp.Format("2006-01-02T15:04:05.000Z07:00"),
@@ -31,8 +38,8 @@ func (l *StdoutLogger) LogEvent(event *types.FileEvent) error {
             "action": fmt.Sprintf("nfs-file-%s", event.Operation.String()),
         },
         "file": map[string]interface{}{
-            "path":   event.Filename,
-            "name":   event.Filename, // Just filename for now (not full path)
+            "path":   fullPath,
+            "name":   event.Filename,
             "inode":  fmt.Sprintf("%d", event.Inode),
             "device": fmt.Sprintf("%d", event.DeviceID),
         },

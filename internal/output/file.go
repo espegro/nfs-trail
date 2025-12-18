@@ -67,6 +67,12 @@ func (l *FileLogger) LogEvent(event *types.FileEvent) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
+	// Build full path from mount point + filename
+	fullPath := event.Filename
+	if event.MountPoint != "" && event.Filename != "" {
+		fullPath = filepath.Join(event.MountPoint, event.Filename)
+	}
+
 	output := map[string]interface{}{
 		"@timestamp": event.Timestamp.Format("2006-01-02T15:04:05.000Z07:00"),
 		"event": map[string]interface{}{
@@ -74,7 +80,7 @@ func (l *FileLogger) LogEvent(event *types.FileEvent) error {
 			"action": fmt.Sprintf("nfs-file-%s", event.Operation.String()),
 		},
 		"file": map[string]interface{}{
-			"path":   event.Filename,
+			"path":   fullPath,
 			"name":   event.Filename,
 			"inode":  fmt.Sprintf("%d", event.Inode),
 			"device": fmt.Sprintf("%d", event.DeviceID),

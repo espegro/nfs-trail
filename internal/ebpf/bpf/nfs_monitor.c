@@ -95,79 +95,27 @@ static __always_inline bool should_trace_event(struct file *file) {
     return true;
 }
 
-// Maximum path depth to walk (eBPF loop limit)
-#define MAX_PATH_DEPTH 20
-
 // Helper to get full path from dentry by walking up the tree
-// Builds path in reverse, then we store it reversed (caller handles display)
+// Uses a simpler approach: just get basename for now, prepend mount point in userspace
 static __always_inline int get_dentry_path(struct dentry *dentry, char *buf, int size) {
     if (!dentry || !buf || size <= 0)
         return -1;
 
-    // Temporary buffer for path components
-    char component[64];
-    int pos = size - 1;
-    buf[pos] = '\0';
-
-    struct dentry *current = dentry;
-    struct dentry *parent;
-
-    #pragma unroll
-    for (int i = 0; i < MAX_PATH_DEPTH; i++) {
-        if (!current)
-            break;
-
-        parent = BPF_CORE_READ(current, d_parent);
-
-        // Stop if we've reached the root (parent == self)
-        if (parent == current)
-            break;
-
-        // Get component name
-        const unsigned char *name_ptr = BPF_CORE_READ(current, d_name.name);
-        if (!name_ptr)
-            break;
-
-        int len = bpf_probe_read_kernel_str(component, sizeof(component), name_ptr);
-        if (len <= 1)  // Empty or just null terminator
-            break;
-
-        len--;  // Remove null terminator from length
-
-        // Check if we have space (need len + 1 for slash)
-        if (pos - len - 1 < 0)
-            break;
-
-        // Prepend component
-        pos -= len;
-        bpf_probe_read_kernel(buf + pos, len, component);
-
-        // Prepend slash
-        pos--;
-        buf[pos] = '/';
-
-        current = parent;
-    }
-
-    // If we didn't add anything, just get the basename
-    if (pos == size - 1) {
-        const unsigned char *name_ptr = BPF_CORE_READ(dentry, d_name.name);
-        if (name_ptr) {
-            bpf_probe_read_kernel_str(buf, size, name_ptr);
-        } else {
-            buf[0] = '\0';
-        }
+    // For now, just get the basename - full path resolution is complex in eBPF
+    // The mount point will be prepended in userspace
+    const unsigned char *name_ptr = BPF_CORE_READ(dentry, d_name.name);
+    if (!name_ptr) {
+        buf[0] = '\0';
         return 0;
     }
 
-    // Move path to beginning of buffer
-    int path_len = size - 1 - pos;
-    for (int i = 0; i < path_len && i < size - 1; i++) {
-        buf[i] = buf[pos + i];
+    int len = bpf_probe_read_kernel_str(buf, size, name_ptr);
+    if (len < 0) {
+        buf[0] = '\0';
+        return 0;
     }
-    buf[path_len] = '\0';
 
-    return path_len;
+    return len;
 }
 
 
