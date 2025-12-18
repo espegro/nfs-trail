@@ -121,41 +121,58 @@ static __always_inline void get_dentry_path(struct dentry *dentry, char *buf, in
     }
 
     // Build path by writing directly to output buffer
-    // Start position
-    int pos = 0;
+    // Use unsigned and mask to help verifier track bounds
+    __u32 pos = 0;
+    __u32 remaining;
+    int len;
 
-    // Write d4 name (deepest parent we capture)
+    // Write d4's child name (d3) - deepest parent we capture
     if (d4 && d4 != d3) {
         const unsigned char *n = BPF_CORE_READ(d3, d_name.name);
         if (n) {
-            int len = bpf_probe_read_kernel_str(buf + pos, size - pos, n);
-            if (len > 1) {
-                pos += len - 1;  // exclude null
-                if (pos < size - 1) buf[pos++] = '/';
+            pos = pos & 0xFF;  // Bound pos to 0-255
+            remaining = (size > pos) ? (size - pos) : 0;
+            if (remaining > 0) {
+                len = bpf_probe_read_kernel_str(buf + pos, remaining, n);
+                if (len > 1) {
+                    pos += len - 1;
+                    pos = pos & 0xFF;
+                    if (pos < (__u32)(size - 1)) buf[pos++] = '/';
+                }
             }
         }
     }
 
-    // Write d3 name
+    // Write d3's child name (d2)
     if (d3 && d3 != d2) {
         const unsigned char *n = BPF_CORE_READ(d2, d_name.name);
         if (n) {
-            int len = bpf_probe_read_kernel_str(buf + pos, size - pos, n);
-            if (len > 1) {
-                pos += len - 1;
-                if (pos < size - 1) buf[pos++] = '/';
+            pos = pos & 0xFF;
+            remaining = (size > pos) ? (size - pos) : 0;
+            if (remaining > 0) {
+                len = bpf_probe_read_kernel_str(buf + pos, remaining, n);
+                if (len > 1) {
+                    pos += len - 1;
+                    pos = pos & 0xFF;
+                    if (pos < (__u32)(size - 1)) buf[pos++] = '/';
+                }
             }
         }
     }
 
-    // Write d2 name
+    // Write d2's child name (d1)
     if (d2 && d2 != d1) {
         const unsigned char *n = BPF_CORE_READ(d1, d_name.name);
         if (n) {
-            int len = bpf_probe_read_kernel_str(buf + pos, size - pos, n);
-            if (len > 1) {
-                pos += len - 1;
-                if (pos < size - 1) buf[pos++] = '/';
+            pos = pos & 0xFF;
+            remaining = (size > pos) ? (size - pos) : 0;
+            if (remaining > 0) {
+                len = bpf_probe_read_kernel_str(buf + pos, remaining, n);
+                if (len > 1) {
+                    pos += len - 1;
+                    pos = pos & 0xFF;
+                    if (pos < (__u32)(size - 1)) buf[pos++] = '/';
+                }
             }
         }
     }
@@ -163,9 +180,14 @@ static __always_inline void get_dentry_path(struct dentry *dentry, char *buf, in
     // Write filename (d0)
     const unsigned char *fname = BPF_CORE_READ(d0, d_name.name);
     if (fname) {
-        bpf_probe_read_kernel_str(buf + pos, size - pos, fname);
+        pos = pos & 0xFF;
+        remaining = (size > pos) ? (size - pos) : 0;
+        if (remaining > 0) {
+            bpf_probe_read_kernel_str(buf + pos, remaining, fname);
+        }
     } else {
-        buf[pos] = '\0';
+        pos = pos & 0xFF;
+        if (pos < (__u32)size) buf[pos] = '\0';
     }
 }
 
