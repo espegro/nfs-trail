@@ -71,11 +71,9 @@ type ECSConfig struct {
 
 // PerformanceConfig for performance tuning
 type PerformanceConfig struct {
-    RingBufferSize   int         `yaml:"ringbuffer_size"`
-    Cache            CacheConfig `yaml:"cache"`
-    MaxEventsPerSec  int         `yaml:"max_events_per_sec"`  // Rate limit (0 = unlimited)
-    ChannelBufferSize int        `yaml:"channel_buffer_size"` // Event channel buffer
-    StatsIntervalSec int         `yaml:"stats_interval_sec"`  // Print stats every N seconds (0 = disabled)
+    Cache             CacheConfig `yaml:"cache"`
+    ChannelBufferSize int         `yaml:"channel_buffer_size"` // Event channel buffer
+    StatsIntervalSec  int         `yaml:"stats_interval_sec"`  // Print stats every N seconds (0 = disabled)
 }
 
 // CacheConfig for user/group name caching
@@ -124,10 +122,8 @@ func DefaultConfig() *Config {
             },
         },
         Performance: PerformanceConfig{
-            RingBufferSize:    262144, // 256KB
-            MaxEventsPerSec:   0,      // Unlimited by default
-            ChannelBufferSize: 1000,   // Larger buffer for high I/O
-            StatsIntervalSec:  60,     // Print stats every minute
+            ChannelBufferSize: 1000, // Larger buffer for high I/O
+            StatsIntervalSec:  60,   // Print stats every minute
             Cache: CacheConfig{
                 Size:       10000,
                 TTLSeconds: 300, // 5 minutes

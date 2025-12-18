@@ -5,6 +5,7 @@ import (
     "log"
     "os"
     "os/signal"
+    "sync"
     "sync/atomic"
     "syscall"
     "time"
@@ -45,13 +46,40 @@ func main() {
     // Set log level
     setupLogging(cfg.Logging.Level)
 
-    // Detect NFS mounts
-    log.Println("Detecting NFS mounts...")
-    nfsMounts, err := mounts.DetectNFSMounts()
+    // Create eBPF monitor first (needed for mount watcher callback)
+    log.Println("Loading eBPF programs...")
+    monitor, err := ebpf.NewMonitor()
     if err != nil {
-        log.Fatalf("Failed to detect NFS mounts: %v", err)
+        log.Fatalf("Failed to create eBPF monitor: %v", err)
     }
+    defer monitor.Close()
 
+    // Create mount watcher (checks every 5 seconds)
+    mountWatcher := mounts.NewMountWatcher(5 * time.Second)
+
+    // Register callback for mount changes
+    mountWatcher.OnChange(func(newMounts map[uint64]mounts.MountInfo) {
+        // Filter mounts based on config
+        if !cfg.Mounts.All {
+            newMounts = mounts.FilterMountsByPath(newMounts, cfg.Mounts.Paths)
+        }
+        // Update eBPF map
+        if err := monitor.UpdateNFSMounts(mounts.GetDeviceIDMap(newMounts)); err != nil {
+            log.Printf("Error updating NFS mounts map: %v", err)
+        } else {
+            log.Printf("Updated NFS mount filters (%d mounts)", len(newMounts))
+        }
+    })
+
+    // Start mount watcher
+    log.Println("Starting mount watcher...")
+    if err := mountWatcher.Start(); err != nil {
+        log.Fatalf("Failed to start mount watcher: %v", err)
+    }
+    defer mountWatcher.Stop()
+
+    // Get initial mounts
+    nfsMounts := mountWatcher.GetCurrentMounts()
     if len(nfsMounts) == 0 {
         log.Println("Warning: No NFS mounts detected")
     } else {
@@ -67,14 +95,6 @@ func main() {
         nfsMounts = mounts.FilterMountsByPath(nfsMounts, cfg.Mounts.Paths)
         log.Printf("Filtered to %d mount(s) based on configuration", len(nfsMounts))
     }
-
-    // Create eBPF monitor
-    log.Println("Loading eBPF programs...")
-    monitor, err := ebpf.NewMonitor()
-    if err != nil {
-        log.Fatalf("Failed to create eBPF monitor: %v", err)
-    }
-    defer monitor.Close()
 
     // Update NFS mounts map
     log.Println("Configuring NFS mount filters...")
@@ -124,8 +144,9 @@ func main() {
 
     // Create user/group cache
     cacheTTL := time.Duration(cfg.Performance.Cache.TTLSeconds) * time.Second
-    userGroupCache := enrichment.NewUserGroupCache(cacheTTL)
-    log.Printf("User/group cache initialized (TTL: %v)", cacheTTL)
+    cacheSize := cfg.Performance.Cache.Size
+    userGroupCache := enrichment.NewUserGroupCache(cacheTTL, cacheSize)
+    log.Printf("User/group cache initialized (TTL: %v, size: %d)", cacheTTL, cacheSize)
 
     // Event channel (from eBPF) - use configurable buffer size
     bufferSize := cfg.Performance.ChannelBufferSize
@@ -139,6 +160,9 @@ func main() {
 
     // Initialize stats
     var stats Stats
+
+    // WaitGroup for graceful shutdown
+    var wg sync.WaitGroup
 
     // Create aggregator if enabled
     var agg *aggregator.EventAggregator
@@ -154,7 +178,9 @@ func main() {
     }
 
     // Start event processor (enrichment and filtering)
+    wg.Add(1)
     go func() {
+        defer wg.Done()
         for event := range eventChan {
             atomic.AddUint64(&stats.EventsReceived, 1)
 
@@ -170,8 +196,8 @@ func main() {
                 continue // Skip this event
             }
 
-            // Enrich event with mount point
-            event.MountPoint = mounts.GetMountPointByDeviceID(nfsMounts, event.DeviceID)
+            // Enrich event with mount point (use current mounts from watcher)
+            event.MountPoint = mounts.GetMountPointByDeviceID(mountWatcher.GetCurrentMounts(), event.DeviceID)
 
             // Enrich with username/groupname
             event.Username = userGroupCache.GetUsername(event.UID)
@@ -200,7 +226,9 @@ func main() {
     }()
 
     // Start output processor (handles both individual and aggregated events)
+    wg.Add(1)
     go func() {
+        defer wg.Done()
         for item := range outputChan {
             switch v := item.(type) {
             case *types.FileEvent:
@@ -256,14 +284,19 @@ func main() {
         statsTicker.Stop()
     }
 
+    // Close event channel to trigger shutdown of processor goroutines
+    close(eventChan)
+
+    // Wait for goroutines to finish processing remaining events
+    log.Println("Waiting for event processors to finish...")
+    wg.Wait()
+
     // Print final stats
     log.Printf("Final stats: received=%d processed=%d filtered=%d dropped=%d",
         atomic.LoadUint64(&stats.EventsReceived),
         atomic.LoadUint64(&stats.EventsProcessed),
         atomic.LoadUint64(&stats.EventsFiltered),
         atomic.LoadUint64(&stats.EventsDropped))
-
-    close(eventChan)
 }
 
 func loadConfiguration(path string) (*config.Config, error) {

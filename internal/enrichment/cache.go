@@ -24,10 +24,13 @@ type cacheEntry struct {
 }
 
 // NewUserGroupCache creates a new user/group cache with LRU size limit
-func NewUserGroupCache(ttl time.Duration) *UserGroupCache {
-    // Create LRU caches with reasonable size limit (10000 entries each)
-    userCache, _ := lru.New[uint32, *cacheEntry](10000)
-    groupCache, _ := lru.New[uint32, *cacheEntry](10000)
+func NewUserGroupCache(ttl time.Duration, size int) *UserGroupCache {
+    if size <= 0 {
+        size = 10000 // Default fallback
+    }
+    // Create LRU caches with configurable size limit
+    userCache, _ := lru.New[uint32, *cacheEntry](size)
+    groupCache, _ := lru.New[uint32, *cacheEntry](size)
 
     return &UserGroupCache{
         userCache:  userCache,

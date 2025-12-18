@@ -16,12 +16,13 @@ import (
 
 // Monitor manages the eBPF programs and maps
 type Monitor struct {
-    objs          *nfsMonitorObjects
-    links         []link.Link
-    reader        *ringbuf.Reader
-    nfsMountsMap  *ebpf.Map
-    uidFilterMap  *ebpf.Map
-    eventsRingBuf *ebpf.Map
+    objs             *nfsMonitorObjects
+    links            []link.Link
+    reader           *ringbuf.Reader
+    nfsMountsMap     *ebpf.Map
+    uidFilterMap     *ebpf.Map
+    eventsRingBuf    *ebpf.Map
+    currentDeviceIDs map[uint64]bool // Track current device IDs for cleanup
 }
 
 // NewMonitor creates a new eBPF monitor
@@ -33,10 +34,11 @@ func NewMonitor() (*Monitor, error) {
     }
 
     m := &Monitor{
-        objs:          objs,
-        nfsMountsMap:  objs.NfsMounts,
-        uidFilterMap:  objs.UidFilter,
-        eventsRingBuf: objs.Events,
+        objs:             objs,
+        nfsMountsMap:     objs.NfsMounts,
+        uidFilterMap:     objs.UidFilter,
+        eventsRingBuf:    objs.Events,
+        currentDeviceIDs: make(map[uint64]bool),
     }
 
     return m, nil
@@ -269,8 +271,17 @@ func nullTerminatedString(b []byte) string {
 
 // UpdateNFSMounts updates the NFS mounts map
 func (m *Monitor) UpdateNFSMounts(deviceIDs map[uint64]bool) error {
-    // Clear existing entries (in production, you'd want to be more careful)
-    // For now, just add the new ones
+    // Remove device IDs that are no longer in the new set
+    for oldDevID := range m.currentDeviceIDs {
+        if _, exists := deviceIDs[oldDevID]; !exists {
+            if err := m.nfsMountsMap.Delete(oldDevID); err != nil {
+                // Ignore "not found" errors
+                log.Printf("Note: could not delete device %d from map: %v", oldDevID, err)
+            }
+        }
+    }
+
+    // Add/update device IDs
     for devID, shouldMonitor := range deviceIDs {
         var val uint8
         if shouldMonitor {
@@ -282,6 +293,12 @@ func (m *Monitor) UpdateNFSMounts(deviceIDs map[uint64]bool) error {
         if err := m.nfsMountsMap.Put(devID, val); err != nil {
             return fmt.Errorf("updating nfs_mounts map for device %d: %w", devID, err)
         }
+    }
+
+    // Update tracked device IDs
+    m.currentDeviceIDs = make(map[uint64]bool)
+    for devID := range deviceIDs {
+        m.currentDeviceIDs[devID] = true
     }
 
     return nil
