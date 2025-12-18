@@ -290,6 +290,7 @@ func (m *Monitor) UpdateNFSMounts(deviceIDs map[uint64]bool) error {
             val = 0
         }
 
+        log.Printf("Adding device ID %d (0x%x) to eBPF map (monitor=%v)", devID, devID, shouldMonitor)
         if err := m.nfsMountsMap.Put(devID, val); err != nil {
             return fmt.Errorf("updating nfs_mounts map for device %d: %w", devID, err)
         }

@@ -123,7 +123,7 @@ func DefaultConfig() *Config {
         },
         Performance: PerformanceConfig{
             ChannelBufferSize: 1000, // Larger buffer for high I/O
-            StatsIntervalSec:  60,   // Print stats every minute
+            StatsIntervalSec:  0,    // Disabled by default
             Cache: CacheConfig{
                 Size:       10000,
                 TTLSeconds: 300, // 5 minutes
