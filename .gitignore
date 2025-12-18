@@ -23,6 +23,7 @@ go.sum
 # OS
 .DS_Store
 Thumbs.db
+.nfs*
 
 # Logs
 *.log
