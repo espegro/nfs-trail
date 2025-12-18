@@ -95,20 +95,77 @@ static __always_inline bool should_trace_event(struct file *file) {
     return true;
 }
 
-// Helper to get filename from dentry
-// Note: Full path walking is not feasible in BPF due to stack limits and verifier constraints
-// Only basename is captured; mount point is prepended in userspace
+// Helper to get relative path from dentry (up to 4 parent directories)
+// Builds path like: dir3/dir2/dir1/filename
 static __always_inline void get_dentry_path(struct dentry *dentry, char *buf, int size) {
     if (!dentry || !buf || size <= 0) {
         if (buf && size > 0) buf[0] = '\0';
         return;
     }
 
-    const unsigned char *name = BPF_CORE_READ(dentry, d_name.name);
-    if (name) {
-        bpf_probe_read_kernel_str(buf, size, name);
+    // Get pointers to each level (no string storage yet)
+    struct dentry *d0 = dentry;
+    struct dentry *d1 = BPF_CORE_READ(d0, d_parent);
+    struct dentry *d2 = NULL;
+    struct dentry *d3 = NULL;
+    struct dentry *d4 = NULL;
+
+    if (d1 && d1 != d0) {
+        d2 = BPF_CORE_READ(d1, d_parent);
+        if (d2 && d2 != d1) {
+            d3 = BPF_CORE_READ(d2, d_parent);
+            if (d3 && d3 != d2) {
+                d4 = BPF_CORE_READ(d3, d_parent);
+            }
+        }
+    }
+
+    // Build path by writing directly to output buffer
+    // Start position
+    int pos = 0;
+
+    // Write d4 name (deepest parent we capture)
+    if (d4 && d4 != d3) {
+        const unsigned char *n = BPF_CORE_READ(d3, d_name.name);
+        if (n) {
+            int len = bpf_probe_read_kernel_str(buf + pos, size - pos, n);
+            if (len > 1) {
+                pos += len - 1;  // exclude null
+                if (pos < size - 1) buf[pos++] = '/';
+            }
+        }
+    }
+
+    // Write d3 name
+    if (d3 && d3 != d2) {
+        const unsigned char *n = BPF_CORE_READ(d2, d_name.name);
+        if (n) {
+            int len = bpf_probe_read_kernel_str(buf + pos, size - pos, n);
+            if (len > 1) {
+                pos += len - 1;
+                if (pos < size - 1) buf[pos++] = '/';
+            }
+        }
+    }
+
+    // Write d2 name
+    if (d2 && d2 != d1) {
+        const unsigned char *n = BPF_CORE_READ(d1, d_name.name);
+        if (n) {
+            int len = bpf_probe_read_kernel_str(buf + pos, size - pos, n);
+            if (len > 1) {
+                pos += len - 1;
+                if (pos < size - 1) buf[pos++] = '/';
+            }
+        }
+    }
+
+    // Write filename (d0)
+    const unsigned char *fname = BPF_CORE_READ(d0, d_name.name);
+    if (fname) {
+        bpf_probe_read_kernel_str(buf + pos, size - pos, fname);
     } else {
-        buf[0] = '\0';
+        buf[pos] = '\0';
     }
 }
 

@@ -182,11 +182,9 @@ eBPF kprobes (kernel) --> Ring Buffer --> Go userspace --> JSON output
 
 ## Limitations
 
-**Path Resolution**: Only the filename (basename) is captured in eBPF due to kernel stack limits (512 bytes) and verifier constraints. The full path shown in logs is `mount_point + filename`. Subdirectory paths are not captured.
+**Path Resolution**: Up to 4 parent directory levels are captured in eBPF. The full path shown in logs is `mount_point + relative_path`. For deeply nested paths (more than 4 levels from the mount root), only the deepest 4 directories plus filename are captured.
 
-Example: A file at `/mnt/nfs/subdir/deep/file.txt` will be logged as `/mnt/nfs/file.txt`.
-
-For full path auditing, consider supplementing with auditd or using inode-based correlation.
+Example: A file at `/mnt/nfs/a/b/c/d/e/file.txt` will be logged as `/mnt/nfs/b/c/d/e/file.txt` (missing `a/`).
 
 ## License
 
