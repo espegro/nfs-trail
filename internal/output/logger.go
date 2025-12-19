@@ -1,6 +1,6 @@
 package output
 
-import "github.com/espen/nfs-trail/internal/types"
+import "github.com/espegro/nfs-trail/internal/types"
 
 // Logger is the interface for event loggers
 type Logger interface {

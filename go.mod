@@ -1,4 +1,4 @@
-module github.com/espen/nfs-trail
+module github.com/espegro/nfs-trail
 
 go 1.24.0
 

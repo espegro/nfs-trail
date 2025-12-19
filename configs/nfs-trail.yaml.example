@@ -81,19 +81,29 @@ output:
 
 # Performance tuning
 performance:
-  # Ring buffer size (bytes) for eBPF to userspace communication
-  ringbuffer_size: 262144  # 256KB
-
   # Event channel buffer size (number of events)
-  # Increase this for high I/O environments
-  channel_buffer_size: 1000
-
-  # Maximum events per second (0 = unlimited)
-  # Set this to prevent overwhelming the system under extreme load
-  max_events_per_sec: 0
+  # Large buffer helps handle I/O bursts (e.g., ls -R, find, rsync)
+  channel_buffer_size: 10000
 
   # Print processing statistics every N seconds (0 = disabled)
-  stats_interval_sec: 60
+  stats_interval_sec: 0
+
+  # Rate limiting (protects against event floods)
+  # Maximum events per second to process (0 = unlimited)
+  # Example: 50000 = allow 50K events/sec, drop excess
+  max_events_per_sec: 0
+
+  # Drop policy when buffer/rate limit exceeded
+  # "oldest" - drop oldest events to make room for new (maintains recent history)
+  # "newest" - drop new events when full (preserves existing data)
+  drop_policy: "oldest"
+
+  # Log warnings when events are dropped (important for audit trail)
+  log_dropped_events: true
+
+  # Log drop statistics every N seconds (0 = disabled)
+  # Shows drop rate percentage for monitoring
+  drop_stats_interval_sec: 30
 
   # User/group name cache settings
   cache:

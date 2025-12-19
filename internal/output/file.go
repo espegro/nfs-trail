@@ -8,7 +8,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/espen/nfs-trail/internal/types"
+	"github.com/espegro/nfs-trail/internal/types"
 	"gopkg.in/natefinch/lumberjack.v2"
 )
 

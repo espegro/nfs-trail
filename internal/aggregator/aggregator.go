@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/espen/nfs-trail/internal/types"
+	"github.com/espegro/nfs-trail/internal/types"
 )
 
 // EventAggregator buffers and aggregates similar events

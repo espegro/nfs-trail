@@ -71,9 +71,13 @@ type ECSConfig struct {
 
 // PerformanceConfig for performance tuning
 type PerformanceConfig struct {
-    Cache             CacheConfig `yaml:"cache"`
-    ChannelBufferSize int         `yaml:"channel_buffer_size"` // Event channel buffer
-    StatsIntervalSec  int         `yaml:"stats_interval_sec"`  // Print stats every N seconds (0 = disabled)
+    Cache                CacheConfig `yaml:"cache"`
+    ChannelBufferSize    int         `yaml:"channel_buffer_size"`     // Event channel buffer
+    StatsIntervalSec     int         `yaml:"stats_interval_sec"`      // Print stats every N seconds (0 = disabled)
+    MaxEventsPerSec      int         `yaml:"max_events_per_sec"`      // Max events/sec (0 = unlimited)
+    DropPolicy           string      `yaml:"drop_policy"`             // "oldest" or "newest"
+    LogDroppedEvents     bool        `yaml:"log_dropped_events"`      // Log when events are dropped
+    DropStatsIntervalSec int         `yaml:"drop_stats_interval_sec"` // Log drop stats every N seconds (0 = disabled)
 }
 
 // CacheConfig for user/group name caching
@@ -122,8 +126,12 @@ func DefaultConfig() *Config {
             },
         },
         Performance: PerformanceConfig{
-            ChannelBufferSize: 1000, // Larger buffer for high I/O
-            StatsIntervalSec:  0,    // Disabled by default
+            ChannelBufferSize:    10000, // Large buffer for bursts
+            StatsIntervalSec:     0,     // Disabled by default
+            MaxEventsPerSec:      0,     // Unlimited by default
+            DropPolicy:           "oldest",
+            LogDroppedEvents:     true,
+            DropStatsIntervalSec: 30, // Log drop stats every 30 seconds
             Cache: CacheConfig{
                 Size:       10000,
                 TTLSeconds: 300, // 5 minutes

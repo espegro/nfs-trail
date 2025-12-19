@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/espen/nfs-trail/internal/types"
+	"github.com/espegro/nfs-trail/internal/types"
 )
 
 func TestNewEventAggregator(t *testing.T) {

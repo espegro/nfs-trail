@@ -89,8 +89,11 @@ output:
     compress: true
 
 performance:
-  channel_buffer_size: 1000
-  stats_interval_sec: 60
+  channel_buffer_size: 10000
+  max_events_per_sec: 0
+  drop_policy: "oldest"
+  log_dropped_events: true
+  drop_stats_interval_sec: 30
 ```
 
 ### Options
@@ -115,6 +118,19 @@ performance:
 - `file.max_size_mb`: Size before rotation
 - `file.max_backups`: Rotated files to keep
 - `file.compress`: Gzip rotated files
+
+**performance (rate limiting)**
+- `channel_buffer_size`: Event buffer size (default: 10000)
+  - Large buffer handles I/O bursts (e.g., `ls -R`, `rsync`)
+- `max_events_per_sec`: Rate limit (0 = unlimited)
+  - Set to prevent overwhelming system under extreme load
+- `drop_policy`: `"oldest"` or `"newest"`
+  - `oldest`: Drop old events to preserve recent activity (default)
+  - `newest`: Drop new events to preserve existing data
+- `log_dropped_events`: Log warnings when events are dropped (default: true)
+  - **Critical for audit trail** - you must know when data is lost
+- `drop_stats_interval_sec`: Log drop statistics every N seconds (default: 30)
+  - Shows drop rate percentage for monitoring
 
 ## Usage
 

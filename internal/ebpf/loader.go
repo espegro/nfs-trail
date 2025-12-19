@@ -11,7 +11,7 @@ import (
     "github.com/cilium/ebpf"
     "github.com/cilium/ebpf/link"
     "github.com/cilium/ebpf/ringbuf"
-    "github.com/espen/nfs-trail/internal/types"
+    "github.com/espegro/nfs-trail/internal/types"
 )
 
 // Monitor manages the eBPF programs and maps

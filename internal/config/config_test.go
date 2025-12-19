@@ -26,8 +26,16 @@ func TestDefaultConfig(t *testing.T) {
 		t.Error("Expected Aggregation.Enabled to be true by default")
 	}
 
-	if cfg.Performance.ChannelBufferSize != 1000 {
-		t.Errorf("Expected ChannelBufferSize 1000, got %d", cfg.Performance.ChannelBufferSize)
+	if cfg.Performance.ChannelBufferSize != 10000 {
+		t.Errorf("Expected ChannelBufferSize 10000, got %d", cfg.Performance.ChannelBufferSize)
+	}
+
+	if cfg.Performance.DropPolicy != "oldest" {
+		t.Errorf("Expected DropPolicy 'oldest', got '%s'", cfg.Performance.DropPolicy)
+	}
+
+	if !cfg.Performance.LogDroppedEvents {
+		t.Error("Expected LogDroppedEvents to be true by default")
 	}
 }
 

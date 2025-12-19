@@ -7,7 +7,7 @@ import (
     "path/filepath"
     "strings"
 
-    "github.com/espen/nfs-trail/internal/types"
+    "github.com/espegro/nfs-trail/internal/types"
 )
 
 // StdoutLogger writes events to stdout in JSON format

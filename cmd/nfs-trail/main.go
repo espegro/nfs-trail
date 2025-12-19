@@ -10,13 +10,13 @@ import (
     "syscall"
     "time"
 
-    "github.com/espen/nfs-trail/internal/aggregator"
-    "github.com/espen/nfs-trail/internal/config"
-    "github.com/espen/nfs-trail/internal/ebpf"
-    "github.com/espen/nfs-trail/internal/enrichment"
-    "github.com/espen/nfs-trail/internal/mounts"
-    "github.com/espen/nfs-trail/internal/output"
-    "github.com/espen/nfs-trail/internal/types"
+    "github.com/espegro/nfs-trail/internal/aggregator"
+    "github.com/espegro/nfs-trail/internal/config"
+    "github.com/espegro/nfs-trail/internal/ebpf"
+    "github.com/espegro/nfs-trail/internal/enrichment"
+    "github.com/espegro/nfs-trail/internal/mounts"
+    "github.com/espegro/nfs-trail/internal/output"
+    "github.com/espegro/nfs-trail/internal/types"
 )
 
 // Stats tracks event processing statistics
