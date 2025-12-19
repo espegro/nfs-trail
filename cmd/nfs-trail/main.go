@@ -82,7 +82,8 @@ OPTIONS:
 
   -uid <uid>          Only show events from this UID (e.g., -uid 1000)
   -simple             Human-readable output instead of JSON
-  -debug              Enable -simple and -stats (quick troubleshooting)
+  -debug              Quick debug mode: enables -simple, -stats, and uses built-in
+                      defaults (unless -config is explicitly specified)
   -stats              Print statistics every 10 seconds
 
   -config <path>      Path to YAML config (default: /etc/nfs-trail/nfs-trail.yaml)
@@ -141,10 +142,14 @@ func main() {
 
     log.Println("NFS Trail - Starting up...")
 
-    // Handle legacy -debug flag (alias for -simple -stats)
+    // Handle -debug flag: implies -simple, -stats, and -no-config if no explicit config given
     if *debugMode {
         *simpleOutput = true
         *showStats = true
+        // If user didn't explicitly specify a config path, use no-config mode
+        if !isFlagPassed("config") {
+            *noConfig = true
+        }
     }
 
     // Load configuration based on flags
@@ -513,4 +518,15 @@ func setupLogging(level string, output string) error {
     log.SetFlags(log.LstdFlags)
 
     return nil
+}
+
+// isFlagPassed checks if a flag was explicitly set on the command line
+func isFlagPassed(name string) bool {
+    found := false
+    flag.Visit(func(f *flag.Flag) {
+        if f.Name == name {
+            found = true
+        }
+    })
+    return found
 }
