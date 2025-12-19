@@ -1,8 +1,9 @@
 package ratelimit
 
 import (
-	"log"
 	"sync/atomic"
+
+	"github.com/espegro/nfs-trail/internal/logger"
 )
 
 // BufferedSender handles non-blocking sends to a channel with drop policy
@@ -42,7 +43,7 @@ func (b *BufferedSender) handleFullChannel(newData interface{}) bool {
 	if b.logDrops {
 		// Log every 100th drop to avoid log spam
 		if dropped%100 == 1 {
-			log.Printf("WARNING: Event channel full, dropping events (total dropped: %d, policy: %s)",
+			logger.Warn("Event channel full, dropping events (total dropped: %d, policy: %s)",
 				dropped, b.dropPolicy)
 		}
 	}

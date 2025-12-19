@@ -14,6 +14,7 @@ import (
     "github.com/espegro/nfs-trail/internal/config"
     "github.com/espegro/nfs-trail/internal/ebpf"
     "github.com/espegro/nfs-trail/internal/enrichment"
+    "github.com/espegro/nfs-trail/internal/logger"
     "github.com/espegro/nfs-trail/internal/mounts"
     "github.com/espegro/nfs-trail/internal/output"
     "github.com/espegro/nfs-trail/internal/types"
@@ -40,17 +41,23 @@ func main() {
     // Load configuration
     cfg, err := loadConfiguration(*configPath)
     if err != nil {
-        log.Fatalf("Failed to load configuration: %v", err)
+        log.Fatalf("[ERROR] Failed to load configuration: %v", err)
     }
 
-    // Set log level
-    setupLogging(cfg.Logging.Level)
+    // Initialize logging with configured level and output
+    if err := setupLogging(cfg.Logging.Level, cfg.Logging.Output); err != nil {
+        log.Fatalf("[ERROR] Failed to setup logging: %v", err)
+    }
+
+    logger.Info("NFS Trail daemon starting...")
+    logger.Debug("Configuration loaded from %s", *configPath)
 
     // Create eBPF monitor first (needed for mount watcher callback)
-    log.Println("Loading eBPF programs...")
+    logger.Info("Loading eBPF programs...")
     monitor, err := ebpf.NewMonitor()
     if err != nil {
-        log.Fatalf("Failed to create eBPF monitor: %v", err)
+        logger.Error("Failed to create eBPF monitor: %v", err)
+        os.Exit(1)
     }
     defer monitor.Close()
 
@@ -65,27 +72,28 @@ func main() {
         }
         // Update eBPF map
         if err := monitor.UpdateNFSMounts(mounts.GetDeviceIDMap(newMounts)); err != nil {
-            log.Printf("Error updating NFS mounts map: %v", err)
+            logger.Info("Error updating NFS mounts map: %v", err)
         } else {
-            log.Printf("Updated NFS mount filters (%d mounts)", len(newMounts))
+            logger.Info("Updated NFS mount filters (%d mounts)", len(newMounts))
         }
     })
 
     // Start mount watcher
-    log.Println("Starting mount watcher...")
+    logger.Info("Starting mount watcher...")
     if err := mountWatcher.Start(); err != nil {
-        log.Fatalf("Failed to start mount watcher: %v", err)
+        logger.Error("Failed to start mount watcher: %v", err)
+        os.Exit(1)
     }
     defer mountWatcher.Stop()
 
     // Get initial mounts
     nfsMounts := mountWatcher.GetCurrentMounts()
     if len(nfsMounts) == 0 {
-        log.Println("Warning: No NFS mounts detected")
+        logger.Info("Warning: No NFS mounts detected")
     } else {
-        log.Printf("Found %d NFS mount(s):", len(nfsMounts))
+        logger.Info("Found %d NFS mount(s):", len(nfsMounts))
         for _, mount := range nfsMounts {
-            log.Printf("  - %s on %s (type: %s, device_id: %d)",
+            logger.Info("  - %s on %s (type: %s, device_id: %d)",
                 mount.Device, mount.Mountpoint, mount.FSType, mount.DeviceID)
         }
     }
@@ -93,35 +101,38 @@ func main() {
     // Filter mounts based on config
     if !cfg.Mounts.All {
         nfsMounts = mounts.FilterMountsByPath(nfsMounts, cfg.Mounts.Paths)
-        log.Printf("Filtered to %d mount(s) based on configuration", len(nfsMounts))
+        logger.Info("Filtered to %d mount(s) based on configuration", len(nfsMounts))
     }
 
     // Update NFS mounts map
-    log.Println("Configuring NFS mount filters...")
+    logger.Info("Configuring NFS mount filters...")
     if err := monitor.UpdateNFSMounts(mounts.GetDeviceIDMap(nfsMounts)); err != nil {
-        log.Fatalf("Failed to update NFS mounts map: %v", err)
+        logger.Error("Failed to update NFS mounts map: %v", err)
+        os.Exit(1)
     }
 
     // Note: UID filtering is done in userspace (not eBPF) to support large ranges
-    log.Println("UID filtering configured (userspace)")
+    logger.Info("UID filtering configured (userspace)")
 
     // Attach kprobes
-    log.Println("Attaching kprobes...")
+    logger.Info("Attaching kprobes...")
     if err := monitor.AttachProbes(); err != nil {
-        log.Fatalf("Failed to attach probes: %v", err)
+        logger.Error("Failed to attach probes: %v", err)
+        os.Exit(1)
     }
 
     // Start event reader
-    log.Println("Starting event reader...")
+    logger.Info("Starting event reader...")
     if err := monitor.StartEventReader(); err != nil {
-        log.Fatalf("Failed to start event reader: %v", err)
+        logger.Error("Failed to start event reader: %v", err)
+        os.Exit(1)
     }
 
     // Create output logger based on configuration
-    var logger output.Logger
+    var outputLogger output.Logger
     if *debug || cfg.Output.Type == "stdout" || cfg.Output.Type == "" {
-        logger = output.NewStdoutLogger()
-        log.Println("Output: stdout")
+        outputLogger = output.NewStdoutLogger()
+        logger.Info("Output: stdout")
     } else if cfg.Output.Type == "file" {
         fileLogger, err := output.NewFileLogger(output.FileLoggerConfig{
             Path:       cfg.Output.File.Path,
@@ -131,22 +142,23 @@ func main() {
             Compress:   cfg.Output.File.Compress,
         })
         if err != nil {
-            log.Fatalf("Failed to create file logger: %v", err)
+            logger.Error("Failed to create file logger: %v", err)
+        os.Exit(1)
         }
-        logger = fileLogger
-        log.Printf("Output: file (%s, max %dMB, %d backups)",
+        outputLogger = fileLogger
+        logger.Info("Output: file (%s, max %dMB, %d backups)",
             cfg.Output.File.Path, cfg.Output.File.MaxSizeMB, cfg.Output.File.MaxBackups)
     } else {
-        log.Printf("Warning: Unknown output type '%s', using stdout", cfg.Output.Type)
-        logger = output.NewStdoutLogger()
+        logger.Info("Warning: Unknown output type '%s', using stdout", cfg.Output.Type)
+        outputLogger = output.NewStdoutLogger()
     }
-    defer logger.Close()
+    defer outputLogger.Close()
 
     // Create user/group cache
     cacheTTL := time.Duration(cfg.Performance.Cache.TTLSeconds) * time.Second
     cacheSize := cfg.Performance.Cache.Size
     userGroupCache := enrichment.NewUserGroupCache(cacheTTL, cacheSize)
-    log.Printf("User/group cache initialized (TTL: %v, size: %d)", cacheTTL, cacheSize)
+    logger.Info("User/group cache initialized (TTL: %v, size: %d)", cacheTTL, cacheSize)
 
     // Event channel (from eBPF) - use configurable buffer size
     bufferSize := cfg.Performance.ChannelBufferSize
@@ -173,7 +185,7 @@ func main() {
             cfg.Aggregation.MaxFileList,
             outputChan,
         )
-        log.Printf("Event aggregation enabled (window: %dms, min count: %d)",
+        logger.Info("Event aggregation enabled (window: %dms, min count: %d)",
             cfg.Aggregation.WindowMS, cfg.Aggregation.MinEventCount)
     }
 
@@ -233,14 +245,14 @@ func main() {
             switch v := item.(type) {
             case *types.FileEvent:
                 // Individual event
-                if err := logger.LogEvent(v); err != nil {
-                    log.Printf("Error logging event: %v", err)
+                if err := outputLogger.LogEvent(v); err != nil {
+                    logger.Info("Error logging event: %v", err)
                 }
             case *aggregator.AggregatedEvent:
                 // Aggregated event
                 duration := v.EndTime.Sub(v.StartTime).Nanoseconds()
-                if err := logger.LogAggregatedEvent(v.Count, v.Files, v.FirstEvent, duration); err != nil {
-                    log.Printf("Error logging aggregated event: %v", err)
+                if err := outputLogger.LogAggregatedEvent(v.Count, v.Files, v.FirstEvent, duration); err != nil {
+                    logger.Info("Error logging aggregated event: %v", err)
                 }
             }
         }
@@ -250,12 +262,12 @@ func main() {
     sigChan := make(chan os.Signal, 1)
     signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 
-    log.Println("NFS Trail is running. Press Ctrl+C to stop.")
+    logger.Info("NFS Trail is running. Press Ctrl+C to stop.")
 
     // Start reading events in a goroutine
     go func() {
         if err := monitor.ReadEvents(eventChan); err != nil {
-            log.Printf("Error reading events: %v", err)
+            logger.Info("Error reading events: %v", err)
         }
     }()
 
@@ -277,7 +289,7 @@ func main() {
 
     // Wait for signal
     <-sigChan
-    log.Println("Shutting down...")
+    logger.Info("Shutting down...")
 
     // Stop stats ticker if running
     if statsTicker != nil {
@@ -288,7 +300,7 @@ func main() {
     close(eventChan)
 
     // Wait for goroutines to finish processing remaining events
-    log.Println("Waiting for event processors to finish...")
+    logger.Info("Waiting for event processors to finish...")
     wg.Wait()
 
     // Print final stats
@@ -304,7 +316,7 @@ func loadConfiguration(path string) (*config.Config, error) {
     cfg, err := config.LoadConfig(path)
     if err != nil {
         if os.IsNotExist(err) {
-            log.Printf("Config file not found at %s, using defaults", path)
+            logger.Info("Config file not found at %s, using defaults", path)
             return config.DefaultConfig(), nil
         }
         return nil, err
@@ -313,8 +325,14 @@ func loadConfiguration(path string) (*config.Config, error) {
     return cfg, nil
 }
 
-func setupLogging(level string) {
-    // For now, just log everything
-    // TODO: Implement proper log levels
-    log.SetFlags(log.LstdFlags | log.Lshortfile)
+func setupLogging(level string, output string) error {
+    // Initialize structured logger with configured level and output
+    if err := logger.Init(level, output); err != nil {
+        return err
+    }
+
+    // Keep standard log for libraries that use it
+    log.SetFlags(log.LstdFlags)
+
+    return nil
 }

@@ -1,10 +1,11 @@
 package ratelimit
 
 import (
-	"log"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/espegro/nfs-trail/internal/logger"
 )
 
 // EventLimiter handles rate limiting and drop tracking for events
@@ -95,7 +96,7 @@ func (l *EventLimiter) recordDrop() {
 		now := time.Now()
 		// Log first drop or if more than 5 seconds since last drop log
 		if l.lastDropTime.IsZero() || now.Sub(l.lastDropTime) > 5*time.Second {
-			log.Printf("WARNING: Event dropped (rate limit exceeded). Total drops: %d",
+			logger.Warn("Event dropped (rate limit exceeded). Total drops: %d",
 				atomic.LoadUint64(&l.eventsDropped))
 			l.lastDropTime = now
 		}
@@ -118,7 +119,7 @@ func (l *EventLimiter) statsReporter() {
 		received, processed, dropped := l.GetStats()
 		if dropped > 0 {
 			dropRate := float64(dropped) / float64(received) * 100
-			log.Printf("Event stats: received=%d processed=%d dropped=%d (%.2f%%)",
+			logger.Info("Event stats: received=%d processed=%d dropped=%d (%.2f%%)",
 				received, processed, dropped, dropRate)
 		}
 	}
