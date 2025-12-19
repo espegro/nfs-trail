@@ -22,7 +22,7 @@ import (
     "github.com/espegro/nfs-trail/internal/types"
 )
 
-const version = "0.1.0"
+const version = "0.5.0"
 
 // Stats tracks event processing statistics
 type Stats struct {
