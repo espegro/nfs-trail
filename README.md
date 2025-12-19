@@ -9,8 +9,8 @@ nfs-trail monitors file access on NFS mounts at the kernel level using eBPF kpro
 ## Features
 
 - Monitors NFSv3 and NFSv4 mounts
-- Captures: read, write, stat, chmod, chown, rename, delete, mkdir, rmdir, symlink, link, setxattr
-- Tracks actual bytes read/written
+- Captures: read, write, open, close, stat, chmod, chown, rename, delete, mkdir, rmdir, symlink, link, setxattr, truncate
+- Tracks actual bytes read/written and file truncation
 - Event aggregation reduces log volume
 - User/group name resolution with caching
 - Configurable UID and operation filtering

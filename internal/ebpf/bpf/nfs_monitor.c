@@ -1042,3 +1042,226 @@ int trace_vfs_setxattr_entry(struct pt_regs *ctx) {
     return 0;
 }
 
+// do_truncate kprobe (for file truncation)
+SEC("kprobe/do_truncate")
+int trace_do_truncate_entry(struct pt_regs *ctx) {
+    // do_truncate signature:
+    // int do_truncate(struct mnt_idmap *idmap, struct dentry *dentry, loff_t length, ...)
+    // dentry is second parameter (RSI on x86_64)
+    struct dentry *dentry = (struct dentry *)((struct pt_regs *)ctx)->si;
+
+    if (!dentry) {
+        return 0;
+    }
+
+    // Get inode from dentry
+    struct inode *inode = BPF_CORE_READ(dentry, d_inode);
+    if (!inode) {
+        return 0;
+    }
+
+    struct super_block *sb = BPF_CORE_READ(inode, i_sb);
+    if (!sb) {
+        return 0;
+    }
+
+    dev_t dev = BPF_CORE_READ(sb, s_dev);
+    __u64 dev_id = dev;
+
+    // Check if this is an NFS mount we care about
+    __u8 *is_nfs = bpf_map_lookup_elem(&nfs_mounts, &dev_id);
+    if (!is_nfs || *is_nfs == 0) {
+        return 0;
+    }
+
+    __u64 pid_tgid = bpf_get_current_pid_tgid();
+    __u32 pid = pid_tgid >> 32;
+    __u32 tid = (__u32)pid_tgid;
+
+    __u64 uid_gid = bpf_get_current_uid_gid();
+    __u32 uid = (__u32)uid_gid;
+    __u32 gid = uid_gid >> 32;
+
+    // Reserve space in ring buffer
+    struct file_event *event = bpf_ringbuf_reserve(&events, sizeof(*event), 0);
+    if (!event) {
+        return 0;
+    }
+
+    // Fill event data
+    event->timestamp_ns = bpf_ktime_get_ns();
+    event->pid = pid;
+    event->tid = tid;
+    event->uid = uid;
+    event->gid = gid;
+    event->operation = NFS_TRAIL_OP_TRUNCATE;
+    event->flags = 0;
+    // Length is third parameter (RDX on x86_64) - store as return_value
+    event->return_value = (long)((struct pt_regs *)ctx)->dx;
+
+    // Get process name
+    bpf_get_current_comm(&event->comm, sizeof(event->comm));
+
+    // Get inode info
+    event->inode = BPF_CORE_READ(inode, i_ino);
+    event->device_id = dev_id;
+
+    // Get filename
+    get_dentry_path(dentry, event->filename, PATH_MAX);
+
+    // Submit event to ring buffer
+    bpf_ringbuf_submit(event, 0);
+
+    return 0;
+}
+
+// vfs_open kprobe (for file open operations)
+SEC("kprobe/vfs_open")
+int trace_vfs_open_entry(struct pt_regs *ctx) {
+    // vfs_open signature:
+    // int vfs_open(const struct path *path, struct file *file)
+    // path is first parameter (RDI on x86_64)
+    const struct path *path = (const struct path *)((struct pt_regs *)ctx)->di;
+
+    if (!path) {
+        return 0;
+    }
+
+    // Get dentry from path
+    struct dentry *dentry = BPF_CORE_READ(path, dentry);
+    if (!dentry) {
+        return 0;
+    }
+
+    // Get inode from dentry
+    struct inode *inode = BPF_CORE_READ(dentry, d_inode);
+    if (!inode) {
+        return 0;
+    }
+
+    struct super_block *sb = BPF_CORE_READ(inode, i_sb);
+    if (!sb) {
+        return 0;
+    }
+
+    dev_t dev = BPF_CORE_READ(sb, s_dev);
+    __u64 dev_id = dev;
+
+    // Check if this is an NFS mount we care about
+    __u8 *is_nfs = bpf_map_lookup_elem(&nfs_mounts, &dev_id);
+    if (!is_nfs || *is_nfs == 0) {
+        return 0;
+    }
+
+    __u64 pid_tgid = bpf_get_current_pid_tgid();
+    __u32 pid = pid_tgid >> 32;
+    __u32 tid = (__u32)pid_tgid;
+
+    __u64 uid_gid = bpf_get_current_uid_gid();
+    __u32 uid = (__u32)uid_gid;
+    __u32 gid = uid_gid >> 32;
+
+    // Reserve space in ring buffer
+    struct file_event *event = bpf_ringbuf_reserve(&events, sizeof(*event), 0);
+    if (!event) {
+        return 0;
+    }
+
+    // Fill event data
+    event->timestamp_ns = bpf_ktime_get_ns();
+    event->pid = pid;
+    event->tid = tid;
+    event->uid = uid;
+    event->gid = gid;
+    event->operation = NFS_TRAIL_OP_OPEN;
+    event->flags = 0;
+    event->return_value = 0;
+
+    // Get process name
+    bpf_get_current_comm(&event->comm, sizeof(event->comm));
+
+    // Get inode info
+    event->inode = BPF_CORE_READ(inode, i_ino);
+    event->device_id = dev_id;
+
+    // Get filename
+    get_dentry_path(dentry, event->filename, PATH_MAX);
+
+    // Submit event to ring buffer
+    bpf_ringbuf_submit(event, 0);
+
+    return 0;
+}
+
+// __fput kprobe (for file close operations)
+SEC("kprobe/__fput")
+int trace_fput_entry(struct pt_regs *ctx) {
+    // __fput signature:
+    // void __fput(struct file *file)
+    // file is first parameter (RDI on x86_64)
+    struct file *file = (struct file *)((struct pt_regs *)ctx)->di;
+
+    if (!file) {
+        return 0;
+    }
+
+    // Check if we should trace this file
+    if (!should_trace_event(file)) {
+        return 0;
+    }
+
+    struct inode *inode = BPF_CORE_READ(file, f_inode);
+    if (!inode) {
+        return 0;
+    }
+
+    struct super_block *sb = BPF_CORE_READ(inode, i_sb);
+    if (!sb) {
+        return 0;
+    }
+
+    dev_t dev = BPF_CORE_READ(sb, s_dev);
+    __u64 dev_id = dev;
+
+    __u64 pid_tgid = bpf_get_current_pid_tgid();
+    __u32 pid = pid_tgid >> 32;
+    __u32 tid = (__u32)pid_tgid;
+
+    __u64 uid_gid = bpf_get_current_uid_gid();
+    __u32 uid = (__u32)uid_gid;
+    __u32 gid = uid_gid >> 32;
+
+    // Reserve space in ring buffer
+    struct file_event *event = bpf_ringbuf_reserve(&events, sizeof(*event), 0);
+    if (!event) {
+        return 0;
+    }
+
+    // Fill event data
+    event->timestamp_ns = bpf_ktime_get_ns();
+    event->pid = pid;
+    event->tid = tid;
+    event->uid = uid;
+    event->gid = gid;
+    event->operation = NFS_TRAIL_OP_CLOSE;
+    event->flags = 0;
+    event->return_value = 0;
+
+    // Get process name
+    bpf_get_current_comm(&event->comm, sizeof(event->comm));
+
+    // Get inode info
+    event->inode = BPF_CORE_READ(inode, i_ino);
+    event->device_id = dev_id;
+
+    // Get filename from dentry
+    struct dentry *dentry = BPF_CORE_READ(file, f_path.dentry);
+    if (dentry) {
+        get_dentry_path(dentry, event->filename, PATH_MAX);
+    }
+
+    // Submit event to ring buffer
+    bpf_ringbuf_submit(event, 0);
+
+    return 0;
+}

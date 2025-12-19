@@ -20,6 +20,7 @@ enum nfs_trail_operation {
     NFS_TRAIL_OP_SYMLINK = 12,
     NFS_TRAIL_OP_LINK = 13,
     NFS_TRAIL_OP_SETXATTR = 14,
+    NFS_TRAIL_OP_TRUNCATE = 15,
 };
 
 // Event structure sent from kernel to userspace

@@ -30,7 +30,7 @@ filters:
   exclude_uid_ranges: []
 
   # Exclude specific operations (reduce noise)
-  # Available: read, write, stat, chmod, chown, rename, delete, mkdir, rmdir, symlink, link, setxattr
+  # Available: read, write, open, close, stat, chmod, chown, rename, delete, mkdir, rmdir, symlink, link, setxattr, truncate
   exclude_operations: []
   # Example to exclude stat operations:
   # exclude_operations:

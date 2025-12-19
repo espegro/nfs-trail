@@ -171,6 +171,33 @@ func (m *Monitor) AttachProbes() error {
         log.Println("Attached kprobe to vfs_unlink")
     }
 
+    // Attach do_truncate kprobe (for file truncation - e.g., > file.txt, truncate -s 0)
+    kpTruncate, err := link.Kprobe("do_truncate", m.objs.TraceDoTruncateEntry, nil)
+    if err != nil {
+        log.Printf("Warning: failed to attach kprobe to do_truncate: %v", err)
+    } else {
+        m.links = append(m.links, kpTruncate)
+        log.Println("Attached kprobe to do_truncate")
+    }
+
+    // Attach vfs_open kprobe (for file open operations)
+    kpOpen, err := link.Kprobe("vfs_open", m.objs.TraceVfsOpenEntry, nil)
+    if err != nil {
+        log.Printf("Warning: failed to attach kprobe to vfs_open: %v", err)
+    } else {
+        m.links = append(m.links, kpOpen)
+        log.Println("Attached kprobe to vfs_open")
+    }
+
+    // Attach __fput kprobe (for file close operations)
+    kpClose, err := link.Kprobe("__fput", m.objs.TraceFputEntry, nil)
+    if err != nil {
+        log.Printf("Warning: failed to attach kprobe to __fput: %v", err)
+    } else {
+        m.links = append(m.links, kpClose)
+        log.Println("Attached kprobe to __fput")
+    }
+
     return nil
 }
 

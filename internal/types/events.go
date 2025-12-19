@@ -20,6 +20,7 @@ const (
     OpSymlink  OperationType = 12
     OpLink     OperationType = 13
     OpSetxattr OperationType = 14
+    OpTruncate OperationType = 15
 )
 
 // String returns the string representation of an operation type
@@ -53,6 +54,8 @@ func (o OperationType) String() string {
         return "link"
     case OpSetxattr:
         return "setxattr"
+    case OpTruncate:
+        return "truncate"
     default:
         return "unknown"
     }
