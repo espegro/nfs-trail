@@ -66,17 +66,16 @@ func printUsage() {
 
 COMMON USAGE:
 
-  Debug specific user's NFS activity:
-    sudo nfs-trail -uid 1000 -simple
-
-  Quick debug session (human-readable output):
+  Quick debug (human-readable):
     sudo nfs-trail -debug
+    sudo nfs-trail -debug -uid 1000
 
-  Production daemon with config:
+  Testing with JSON output:
+    sudo nfs-trail -no-config
+    sudo nfs-trail -no-config -uid 1000 -stats
+
+  Production daemon:
     sudo nfs-trail -config /etc/nfs-trail/nfs-trail.yaml
-
-  Standalone without config:
-    sudo nfs-trail -no-config -simple -stats
 
 OPTIONS:
 
@@ -102,15 +101,18 @@ EXAMPLE OUTPUT (with -simple):
 REAL-WORLD EXAMPLES:
 
   # "Who is hammering the NFS server?"
-  sudo nfs-trail -simple -stats
+  sudo nfs-trail -debug
 
   # "What is user 1000 doing on NFS?"
-  sudo nfs-trail -uid 1000 -simple
+  sudo nfs-trail -debug -uid 1000
 
-  # "Debug with existing config, readable output"
-  sudo nfs-trail -debug -config /etc/nfs-trail/nfs-trail.yaml
+  # "Test JSON output to stdout"
+  sudo nfs-trail -no-config
 
-  # "Monitor and save to file" (requires config with output.type: file)
+  # "Test specific user with JSON + stats"
+  sudo nfs-trail -no-config -uid 1000 -stats
+
+  # "Production: use custom config"
   sudo nfs-trail -config /etc/nfs-trail/nfs-trail.yaml
 
 REQUIREMENTS:

@@ -213,21 +213,20 @@ journalctl -u nfs-trail -f
 sudo nfs-trail -config /etc/nfs-trail/nfs-trail.yaml
 ```
 
-### Standalone Debug Mode
+### Standalone Mode
 
 Quick NFS troubleshooting without configuration file:
 
 ```bash
-# Debug specific user's NFS activity
-sudo nfs-trail -uid 1000 -simple
-
-# Quick debug session
+# Human-readable debug output
 sudo nfs-trail -debug
+sudo nfs-trail -debug -uid 1000
 
-# Who is hammering the NFS server?
-sudo nfs-trail -simple -stats
+# JSON output for testing/parsing
+sudo nfs-trail -no-config
+sudo nfs-trail -no-config -uid 1000 -stats
 
-# Example output:
+# Example output (with -debug or -simple):
 # ──────────────────────────────────────────────────────────────────────────────
 # TIME     ✓ OP       USER             UID     PROCESS    PATH [BYTES/ERROR]
 # ──────────────────────────────────────────────────────────────────────────────
@@ -242,20 +241,17 @@ sudo nfs-trail -simple -stats
 # Show help
 ./nfs-trail -help
 
-# Debug specific user
-sudo nfs-trail -uid 1000 -simple
-
-# Quick debug mode (enables -simple and -stats)
+# Quick debug mode (human-readable output)
 sudo nfs-trail -debug
+sudo nfs-trail -debug -uid 1000
 
-# Use specific config with simple output
-sudo nfs-trail -config /tmp/debug.yaml -simple
-
-# Built-in defaults, JSON output
+# JSON output for testing
 sudo nfs-trail -no-config
+sudo nfs-trail -no-config -uid 1000 -stats
 
-# Enable statistics (prints every 10 seconds)
-sudo nfs-trail -stats
+# Use specific config
+sudo nfs-trail -config /tmp/debug.yaml
+sudo nfs-trail -config /tmp/debug.yaml -simple
 ```
 
 ## Output Format
