@@ -40,7 +40,8 @@ var (
     // Output modes
     simpleOutput = flag.Bool("simple", false, "")
 
-    // Debug options
+    // Debug options (legacy and new)
+    debugMode = flag.Bool("debug", false, "") // Legacy: alias for -simple -stats
     showStats = flag.Bool("stats", false, "")
 
     // Info
@@ -103,6 +104,11 @@ OPTIONS:
         Default: false (JSON output)
 
   Monitoring:
+    -debug
+        Debug mode: enables both -simple and -stats.
+        Useful for quick troubleshooting sessions.
+        Default: false
+
     -stats
         Print statistics every 10 seconds (events received/processed/dropped).
         Useful for monitoring system load and filter effectiveness.
@@ -119,6 +125,9 @@ EXAMPLES:
 
     # Production use with systemd
     sudo systemctl start nfs-trail
+
+    # Quick debugging session (legacy -debug flag)
+    sudo nfs-trail -debug -config /tmp/nfs-trail.yaml
 
     # Quick debugging session (no config needed)
     sudo nfs-trail -no-config -simple -stats
@@ -184,6 +193,12 @@ func main() {
     }
 
     log.Println("NFS Trail - Starting up...")
+
+    // Handle legacy -debug flag (alias for -simple -stats)
+    if *debugMode {
+        *simpleOutput = true
+        *showStats = true
+    }
 
     // Load configuration based on flags
     var cfg *config.Config
