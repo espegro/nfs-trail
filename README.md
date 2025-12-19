@@ -310,6 +310,32 @@ JSON with ECS-aligned schema:
 }
 ```
 
+## Analyzing Logs
+
+Use the included `scripts/analyze-logs.sh` to analyze JSON logs:
+
+```bash
+# Show all failed operations
+./scripts/analyze-logs.sh errors /var/log/nfs-trail/events.json
+
+# Top 10 most active users
+./scripts/analyze-logs.sh top-users 10 /var/log/nfs-trail/events.json
+
+# Permission denied operations (potential scanning)
+./scripts/analyze-logs.sh denied /var/log/nfs-trail/events.json
+
+# Bytes transferred per user
+./scripts/analyze-logs.sh bytes /var/log/nfs-trail/events.json
+
+# Overall statistics
+./scripts/analyze-logs.sh stats /var/log/nfs-trail/events.json
+
+# Analyze from systemd journal
+sudo journalctl -u nfs-trail -o cat | ./scripts/analyze-logs.sh stats
+```
+
+See [scripts/README.md](scripts/README.md) for more examples.
+
 ## Troubleshooting
 
 **No events logged**
