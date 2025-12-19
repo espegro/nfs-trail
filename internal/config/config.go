@@ -155,11 +155,21 @@ func DefaultConfig() *Config {
     }
 }
 
+const (
+    // MaxConfigSize prevents DoS via billion laughs or deeply nested YAML
+    MaxConfigSize = 1 * 1024 * 1024 // 1MB
+)
+
 // LoadConfig loads configuration from a YAML file
 func LoadConfig(path string) (*Config, error) {
     data, err := os.ReadFile(path)
     if err != nil {
         return nil, fmt.Errorf("reading config file: %w", err)
+    }
+
+    // Security: Prevent DoS via oversized config files
+    if len(data) > MaxConfigSize {
+        return nil, fmt.Errorf("config file too large: %d bytes (max %d bytes / 1MB)", len(data), MaxConfigSize)
     }
 
     cfg := DefaultConfig()

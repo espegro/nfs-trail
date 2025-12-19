@@ -46,9 +46,13 @@ func (l *SimpleLogger) LogEvent(event *types.FileEvent) error {
 	}
 
 	// Build full path
-	fullPath := event.Filename
-	if event.MountPoint != "" && event.Filename != "" {
-		fullPath = filepath.Join(event.MountPoint, event.Filename)
+	// Security: Sanitize to prevent log injection via filenames with \n
+	filename := sanitizeString(event.Filename)
+	mountPoint := sanitizeString(event.MountPoint)
+
+	fullPath := filename
+	if mountPoint != "" && filename != "" {
+		fullPath = filepath.Join(mountPoint, filename)
 	}
 
 	// Format bytes nicely
@@ -66,7 +70,7 @@ func (l *SimpleLogger) LogEvent(event *types.FileEvent) error {
 		event.Operation.String(),
 		truncateString(event.Username, 16),
 		event.UID,
-		truncateString(event.Comm, 10),
+		truncateString(sanitizeString(event.Comm), 10),
 		fullPath,
 		bytesStr,
 		statusDetail,

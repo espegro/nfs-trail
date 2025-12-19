@@ -25,9 +25,13 @@ func NewStdoutLogger() *StdoutLogger {
 // LogEvent writes a file event to stdout as JSON
 func (l *StdoutLogger) LogEvent(event *types.FileEvent) error {
     // Build full path from mount point + filename
-    fullPath := event.Filename
-    if event.MountPoint != "" && event.Filename != "" {
-        fullPath = filepath.Join(event.MountPoint, event.Filename)
+    // Security: Sanitize to prevent log injection via filenames with \n
+    filename := sanitizeString(event.Filename)
+    mountPoint := sanitizeString(event.MountPoint)
+
+    fullPath := filename
+    if mountPoint != "" && filename != "" {
+        fullPath = filepath.Join(mountPoint, filename)
     }
 
     // Create a simple JSON representation
@@ -39,13 +43,13 @@ func (l *StdoutLogger) LogEvent(event *types.FileEvent) error {
         },
         "file": map[string]interface{}{
             "path":   fullPath,
-            "name":   event.Filename,
+            "name":   filename,
             "inode":  fmt.Sprintf("%d", event.Inode),
             "device": fmt.Sprintf("%d", event.DeviceID),
         },
         "process": map[string]interface{}{
             "pid":  event.PID,
-            "name": event.Comm,
+            "name": sanitizeString(event.Comm),
         },
         "user": map[string]interface{}{
             "id":   fmt.Sprintf("%d", event.UID),

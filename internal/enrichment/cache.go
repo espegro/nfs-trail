@@ -11,6 +11,11 @@ import (
     "github.com/espegro/nfs-trail/internal/metrics"
 )
 
+const (
+    // LookupTimeout prevents blocking on slow NSS backends (LDAP/NIS)
+    LookupTimeout = 2 * time.Second
+)
+
 // UserGroupCache caches username and groupname lookups with LRU eviction
 type UserGroupCache struct {
     userCache  *lru.Cache[uint32, *cacheEntry]
@@ -53,30 +58,38 @@ func (c *UserGroupCache) GetUsername(uid uint32) string {
     }
     c.mu.RUnlock()
 
-    // Cache miss - lookup from system
+    // Cache miss - lookup from system with timeout
     metrics.RecordCacheMiss()
-    u, err := user.LookupId(strconv.FormatUint(uint64(uid), 10))
-    if err != nil {
-        // Cache the failure too
-        fallback := fmt.Sprintf("uid:%d", uid)
-        c.mu.Lock()
-        c.userCache.Add(uid, &cacheEntry{
-            name:      fallback,
-            timestamp: time.Now(),
-        })
-        c.mu.Unlock()
-        return fallback
+
+    // Security: Use timeout to prevent blocking on slow NSS backends
+    resultChan := make(chan string, 1)
+    go func() {
+        u, err := user.LookupId(strconv.FormatUint(uint64(uid), 10))
+        if err != nil {
+            resultChan <- fmt.Sprintf("uid:%d", uid)
+        } else {
+            resultChan <- u.Username
+        }
+    }()
+
+    var name string
+    select {
+    case name = <-resultChan:
+        // Lookup succeeded within timeout
+    case <-time.After(LookupTimeout):
+        // Timeout - use fallback
+        name = fmt.Sprintf("uid:%d", uid)
     }
 
-    // Cache the result
+    // Cache the result (whether success or timeout fallback)
     c.mu.Lock()
     c.userCache.Add(uid, &cacheEntry{
-        name:      u.Username,
+        name:      name,
         timestamp: time.Now(),
     })
     c.mu.Unlock()
 
-    return u.Username
+    return name
 }
 
 // GetGroupname returns the group name for a given GID
@@ -92,28 +105,36 @@ func (c *UserGroupCache) GetGroupname(gid uint32) string {
     }
     c.mu.RUnlock()
 
-    // Cache miss - lookup from system
+    // Cache miss - lookup from system with timeout
     metrics.RecordCacheMiss()
-    g, err := user.LookupGroupId(strconv.FormatUint(uint64(gid), 10))
-    if err != nil {
-        // Cache the failure too
-        fallback := fmt.Sprintf("gid:%d", gid)
-        c.mu.Lock()
-        c.groupCache.Add(gid, &cacheEntry{
-            name:      fallback,
-            timestamp: time.Now(),
-        })
-        c.mu.Unlock()
-        return fallback
+
+    // Security: Use timeout to prevent blocking on slow NSS backends
+    resultChan := make(chan string, 1)
+    go func() {
+        g, err := user.LookupGroupId(strconv.FormatUint(uint64(gid), 10))
+        if err != nil {
+            resultChan <- fmt.Sprintf("gid:%d", gid)
+        } else {
+            resultChan <- g.Name
+        }
+    }()
+
+    var name string
+    select {
+    case name = <-resultChan:
+        // Lookup succeeded within timeout
+    case <-time.After(LookupTimeout):
+        // Timeout - use fallback
+        name = fmt.Sprintf("gid:%d", gid)
     }
 
-    // Cache the result
+    // Cache the result (whether success or timeout fallback)
     c.mu.Lock()
     c.groupCache.Add(gid, &cacheEntry{
-        name:      g.Name,
+        name:      name,
         timestamp: time.Now(),
     })
     c.mu.Unlock()
 
-    return g.Name
+    return name
 }

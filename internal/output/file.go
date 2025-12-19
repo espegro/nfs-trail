@@ -30,8 +30,33 @@ type FileLoggerConfig struct {
 
 // NewFileLogger creates a new file logger with rotation
 func NewFileLogger(cfg FileLoggerConfig) (*FileLogger, error) {
+	// Validate path to prevent directory traversal attacks
+	absPath, err := filepath.Abs(cfg.Path)
+	if err != nil {
+		return nil, fmt.Errorf("resolving path %s: %w", cfg.Path, err)
+	}
+
+	// Only allow paths under specific directories (security: prevent path traversal)
+	allowedPrefixes := []string{
+		"/var/log/nfs-trail/",
+		"/tmp/nfs-trail/",
+		"/var/tmp/nfs-trail/",
+	}
+
+	isAllowed := false
+	for _, prefix := range allowedPrefixes {
+		if strings.HasPrefix(absPath, prefix) {
+			isAllowed = true
+			break
+		}
+	}
+
+	if !isAllowed {
+		return nil, fmt.Errorf("path %s not in allowed directories (must be under /var/log/nfs-trail/ or /tmp/nfs-trail/)", absPath)
+	}
+
 	// Ensure directory exists
-	dir := filepath.Dir(cfg.Path)
+	dir := filepath.Dir(absPath)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return nil, fmt.Errorf("creating log directory %s: %w", dir, err)
 	}
@@ -48,7 +73,7 @@ func NewFileLogger(cfg FileLoggerConfig) (*FileLogger, error) {
 	}
 
 	logger := &lumberjack.Logger{
-		Filename:   cfg.Path,
+		Filename:   absPath, // Use validated absolute path
 		MaxSize:    cfg.MaxSizeMB, // megabytes
 		MaxBackups: cfg.MaxBackups,
 		MaxAge:     cfg.MaxAgeDays, // days
@@ -68,9 +93,13 @@ func (l *FileLogger) LogEvent(event *types.FileEvent) error {
 	defer l.mu.Unlock()
 
 	// Build full path from mount point + filename
-	fullPath := event.Filename
-	if event.MountPoint != "" && event.Filename != "" {
-		fullPath = filepath.Join(event.MountPoint, event.Filename)
+	// Security: Sanitize to prevent log injection via filenames with \n
+	filename := sanitizeString(event.Filename)
+	mountPoint := sanitizeString(event.MountPoint)
+
+	fullPath := filename
+	if mountPoint != "" && filename != "" {
+		fullPath = filepath.Join(mountPoint, filename)
 	}
 
 	output := map[string]interface{}{
@@ -81,13 +110,13 @@ func (l *FileLogger) LogEvent(event *types.FileEvent) error {
 		},
 		"file": map[string]interface{}{
 			"path":   fullPath,
-			"name":   event.Filename,
+			"name":   filename,
 			"inode":  fmt.Sprintf("%d", event.Inode),
 			"device": fmt.Sprintf("%d", event.DeviceID),
 		},
 		"process": map[string]interface{}{
 			"pid":  event.PID,
-			"name": event.Comm,
+			"name": sanitizeString(event.Comm),
 		},
 		"user": map[string]interface{}{
 			"id":   fmt.Sprintf("%d", event.UID),
