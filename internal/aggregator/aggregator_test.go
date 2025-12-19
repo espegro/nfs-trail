@@ -121,15 +121,16 @@ func TestProcessEvent_MultipleEvents_Aggregated(t *testing.T) {
 
 	agg := NewEventAggregator(100, 3, 10, outputChan)
 
-	// Send 5 events with same key
+	// Send 5 events with same key and varying byte counts
 	for i := 0; i < 5; i++ {
 		event := &types.FileEvent{
-			PID:        1234,
-			UID:        1000,
-			Operation:  types.OpRead,
-			MountPoint: "/mnt/nfs",
-			Filename:   "test.txt",
-			Timestamp:  time.Now(),
+			PID:         1234,
+			UID:         1000,
+			Operation:   types.OpRead,
+			MountPoint:  "/mnt/nfs",
+			Filename:    "test.txt",
+			Timestamp:   time.Now(),
+			ReturnValue: int64(1024 * (i + 1)), // 1024, 2048, 3072, 4096, 5120
 		}
 		agg.ProcessEvent(event)
 		time.Sleep(10 * time.Millisecond)
@@ -148,6 +149,11 @@ func TestProcessEvent_MultipleEvents_Aggregated(t *testing.T) {
 			}
 			if len(v.Files) != 1 {
 				t.Errorf("Expected 1 unique file, got %d", len(v.Files))
+			}
+			// Check total bytes: 1024 + 2048 + 3072 + 4096 + 5120 = 15360
+			expectedBytes := int64(15360)
+			if v.TotalBytes != expectedBytes {
+				t.Errorf("Expected total bytes %d, got %d", expectedBytes, v.TotalBytes)
 			}
 		case *types.FileEvent:
 			t.Error("Expected AggregatedEvent, got FileEvent")

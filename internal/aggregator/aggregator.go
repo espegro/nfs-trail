@@ -23,6 +23,7 @@ type AggregatedEvent struct {
 	FirstEvent    *types.FileEvent
 	LastEvent     *types.FileEvent
 	Count         int
+	TotalBytes    int64    // Sum of all bytes (ReturnValue from events)
 	Files         []string // List of unique filenames
 	StartTime     time.Time
 	EndTime       time.Time
@@ -55,6 +56,7 @@ func (a *EventAggregator) ProcessEvent(event *types.FileEvent) {
 			FirstEvent: event,
 			LastEvent:  event,
 			Count:      1,
+			TotalBytes: event.ReturnValue,
 			Files:      []string{event.Filename},
 			StartTime:  event.Timestamp,
 			EndTime:    event.Timestamp,
@@ -69,6 +71,7 @@ func (a *EventAggregator) ProcessEvent(event *types.FileEvent) {
 		// Update existing aggregation
 		agg.LastEvent = event
 		agg.Count++
+		agg.TotalBytes += event.ReturnValue
 		agg.EndTime = event.Timestamp
 
 		// Add filename if not already in list and under limit

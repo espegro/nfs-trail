@@ -8,7 +8,7 @@ type Logger interface {
 	LogEvent(event *types.FileEvent) error
 
 	// LogAggregatedEvent logs an aggregated event
-	LogAggregatedEvent(count int, files []string, firstEvent *types.FileEvent, duration int64) error
+	LogAggregatedEvent(count int, totalBytes int64, files []string, firstEvent *types.FileEvent, duration int64) error
 
 	// Close closes the logger and flushes any buffered data
 	Close() error

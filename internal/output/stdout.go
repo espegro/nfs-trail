@@ -68,7 +68,7 @@ func (l *StdoutLogger) LogEvent(event *types.FileEvent) error {
 }
 
 // LogAggregatedEvent writes an aggregated event to stdout as JSON
-func (l *StdoutLogger) LogAggregatedEvent(count int, files []string, firstEvent *types.FileEvent, duration int64) error {
+func (l *StdoutLogger) LogAggregatedEvent(count int, totalBytes int64, files []string, firstEvent *types.FileEvent, duration int64) error {
     // Create file list summary
     fileList := files
     hasMore := false
@@ -109,6 +109,7 @@ func (l *StdoutLogger) LogAggregatedEvent(count int, files []string, firstEvent 
             "operation": map[string]interface{}{
                 "type":  firstEvent.Operation.String(),
                 "count": count,
+                "bytes": totalBytes,
             },
         },
         "aggregation": map[string]interface{}{

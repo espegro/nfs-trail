@@ -274,7 +274,7 @@ func main() {
             case *aggregator.AggregatedEvent:
                 // Aggregated event
                 duration := v.EndTime.Sub(v.StartTime).Nanoseconds()
-                if err := outputLogger.LogAggregatedEvent(v.Count, v.Files, v.FirstEvent, duration); err != nil {
+                if err := outputLogger.LogAggregatedEvent(v.Count, v.TotalBytes, v.Files, v.FirstEvent, duration); err != nil {
                     logger.Info("Error logging aggregated event: %v", err)
                 }
             }
