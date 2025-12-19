@@ -3,10 +3,15 @@
 # nfs-trail installation script
 # Supports RHEL 9+ and Ubuntu 24.04+
 #
+# Usage:
+#   ./install.sh                    # Install from current directory
+#   ./install.sh -b <path>          # Install from specific binary path
+#
 
 set -e
 
 BINARY_NAME="nfs-trail"
+BINARY_PATH=""  # Will be set during prerequisite check
 INSTALL_DIR="/usr/local/bin"
 CONFIG_DIR="/etc/nfs-trail"
 LOG_DIR="/var/log/nfs-trail"
@@ -80,18 +85,36 @@ check_prerequisites() {
     fi
     log_info "BTF support OK"
 
-    # Check if binary exists
-    if [[ ! -f "$BINARY_NAME" ]]; then
-        log_error "Binary '$BINARY_NAME' not found. Run 'make' first."
+    # Find binary (in order of precedence)
+    if [[ -n "$BINARY_PATH" ]]; then
+        # User specified path via -b flag
+        if [[ ! -f "$BINARY_PATH" ]]; then
+            log_error "Binary not found at specified path: $BINARY_PATH"
+            exit 1
+        fi
+        log_info "Using binary from: $BINARY_PATH"
+    elif [[ -f "$BINARY_NAME" ]]; then
+        # Current directory (build from source)
+        BINARY_PATH="$BINARY_NAME"
+        log_info "Using binary from current directory"
+    elif [[ -f "releases/v0.5.0/nfs-trail-v0.5.0-linux-amd64" ]]; then
+        # Release directory (if running from repo root)
+        BINARY_PATH="releases/v0.5.0/nfs-trail-v0.5.0-linux-amd64"
+        log_info "Using pre-built release binary: v0.5.0"
+    else
+        log_error "Binary not found. Please:"
+        log_error "  - Build from source: make clean && make"
+        log_error "  - Download release: https://github.com/espegro/nfs-trail/raw/main/releases/v0.5.0/nfs-trail-v0.5.0-linux-amd64"
+        log_error "  - Or specify path: ./install.sh -b /path/to/binary"
         exit 1
     fi
-    log_info "Binary found"
 }
 
 # Install binary
 install_binary() {
     log_info "Installing binary to $INSTALL_DIR..."
-    install -m 0755 "$BINARY_NAME" "$INSTALL_DIR/"
+    install -m 0755 "$BINARY_PATH" "$INSTALL_DIR/$BINARY_NAME"
+    log_info "Installed $BINARY_NAME ($(du -h "$BINARY_PATH" | cut -f1))"
 }
 
 # Install configuration
@@ -277,12 +300,48 @@ print_complete() {
     echo ""
 }
 
+# Parse command line arguments
+parse_args() {
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            -b|--binary)
+                BINARY_PATH="$2"
+                shift 2
+                ;;
+            -h|--help)
+                echo "Usage: $0 [options]"
+                echo ""
+                echo "Options:"
+                echo "  -b, --binary <path>    Path to nfs-trail binary"
+                echo "  -h, --help             Show this help message"
+                echo ""
+                echo "Examples:"
+                echo "  # Install from current directory (after 'make')"
+                echo "  sudo ./install.sh"
+                echo ""
+                echo "  # Install from downloaded release binary"
+                echo "  sudo ./install.sh -b nfs-trail-v0.5.0-linux-amd64"
+                echo ""
+                echo "  # Install from repo release directory"
+                echo "  sudo ./install.sh -b releases/v0.5.0/nfs-trail-v0.5.0-linux-amd64"
+                exit 0
+                ;;
+            *)
+                log_error "Unknown option: $1"
+                echo "Run '$0 --help' for usage information"
+                exit 1
+                ;;
+        esac
+    done
+}
+
 # Main
 main() {
     echo "nfs-trail installer"
     echo "==================="
     echo ""
 
+    parse_args "$@"
     detect_os
     check_prerequisites
     install_binary

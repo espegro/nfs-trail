@@ -18,6 +18,8 @@
 
 ## Installation
 
+### Quick Install (Manual)
+
 ```bash
 # Download the binary
 wget https://github.com/espegro/nfs-trail/raw/main/releases/v0.5.0/nfs-trail-v0.5.0-linux-amd64
@@ -29,11 +31,33 @@ sha256sum -c nfs-trail-v0.5.0-linux-amd64.sha256
 # Make executable
 chmod +x nfs-trail-v0.5.0-linux-amd64
 
-# Move to system path (optional)
+# Move to system path
 sudo mv nfs-trail-v0.5.0-linux-amd64 /usr/local/bin/nfs-trail
 
 # Verify installation
 nfs-trail -version
+```
+
+### Full Install (with systemd service)
+
+```bash
+# Download binary and installer
+wget https://github.com/espegro/nfs-trail/raw/main/releases/v0.5.0/nfs-trail-v0.5.0-linux-amd64
+wget https://github.com/espegro/nfs-trail/raw/main/releases/v0.5.0/nfs-trail-v0.5.0-linux-amd64.sha256
+wget https://github.com/espegro/nfs-trail/raw/main/install.sh
+
+# Verify checksum
+sha256sum -c nfs-trail-v0.5.0-linux-amd64.sha256
+
+# Make executable
+chmod +x nfs-trail-v0.5.0-linux-amd64
+chmod +x install.sh
+
+# Run installer (sets up config, systemd service, SELinux)
+sudo ./install.sh -b nfs-trail-v0.5.0-linux-amd64
+
+# Start service
+sudo systemctl enable --now nfs-trail
 ```
 
 ## Quick Start

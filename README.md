@@ -52,9 +52,13 @@ wget https://github.com/espegro/nfs-trail/raw/main/releases/v0.5.0/nfs-trail-v0.
 wget https://github.com/espegro/nfs-trail/raw/main/releases/v0.5.0/nfs-trail-v0.5.0-linux-amd64.sha256
 sha256sum -c nfs-trail-v0.5.0-linux-amd64.sha256
 
-# Install
+# Make executable
 chmod +x nfs-trail-v0.5.0-linux-amd64
-sudo mv nfs-trail-v0.5.0-linux-amd64 /usr/local/bin/nfs-trail
+
+# Install with full system setup
+wget https://github.com/espegro/nfs-trail/raw/main/install.sh
+chmod +x install.sh
+sudo ./install.sh -b nfs-trail-v0.5.0-linux-amd64
 ```
 
 See [releases/v0.5.0/](releases/v0.5.0/) for more details.
@@ -62,21 +66,36 @@ See [releases/v0.5.0/](releases/v0.5.0/) for more details.
 ## Building from Source
 
 ```bash
+# Clone repository
+git clone https://github.com/espegro/nfs-trail.git
+cd nfs-trail
+
+# Build
 make clean && make
 ```
 
 ## Installation
 
+### From Pre-built Binary
+
+```bash
+# After downloading binary (see above)
+sudo ./install.sh -b nfs-trail-v0.5.0-linux-amd64
 ```
+
+### From Source
+
+```bash
+# After building (see above)
 sudo ./install.sh
 ```
 
 The install script handles:
 - Binary installation to /usr/local/bin
-- Configuration directory setup
+- Configuration directory setup (/etc/nfs-trail/)
 - Systemd service installation
 - SELinux policy on RHEL (if enabled)
-- Log directory creation
+- Log directory creation (/var/log/nfs-trail/)
 
 ## Configuration
 
