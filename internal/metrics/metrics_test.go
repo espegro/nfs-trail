@@ -128,3 +128,44 @@ func TestRateLimitTokensAvailable(t *testing.T) {
 		t.Errorf("Expected 100 tokens, got %.0f", value)
 	}
 }
+
+func TestRecordOperationWithError(t *testing.T) {
+	// Test with permission denied error (-13 = EACCES)
+	RecordOperation("read", -13)
+
+	// Should increment both total operations and failed operations
+	// Note: We can't easily verify counter vector values without more complex helpers
+	// This test mainly ensures no panics occur
+}
+
+func TestGetErrorName(t *testing.T) {
+	tests := []struct {
+		errno    int64
+		expected string
+	}{
+		{-1, "EPERM"},
+		{-2, "ENOENT"},
+		{-13, "EACCES"},
+		{-17, "EEXIST"},
+		{-28, "ENOSPC"},
+		{-122, "EDQUOT"},
+		{-999, "OTHER"},
+	}
+
+	for _, tt := range tests {
+		result := getErrorName(tt.errno)
+		if result != tt.expected {
+			t.Errorf("getErrorName(%d) = %s, want %s", tt.errno, result, tt.expected)
+		}
+	}
+}
+
+func TestRecordOperationSuccess(t *testing.T) {
+	// Test successful read (positive bytes)
+	RecordOperation("read", 4096)
+
+	// Test successful write
+	RecordOperation("write", 2048)
+
+	// Verify no panics occur
+}

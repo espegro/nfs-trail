@@ -100,8 +100,9 @@ func (l *FileLogger) LogEvent(event *types.FileEvent) error {
 		"nfs": map[string]interface{}{
 			"mount_point": event.MountPoint,
 			"operation": map[string]interface{}{
-				"type":  event.Operation.String(),
-				"bytes": event.ReturnValue,
+				"type":    event.Operation.String(),
+				"bytes":   event.ReturnValue,
+				"success": event.ReturnValue >= 0,
 			},
 		},
 	}

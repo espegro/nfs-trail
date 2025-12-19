@@ -148,6 +148,7 @@ When enabled, nfs-trail exposes Prometheus metrics on `http://localhost:9090/met
 - `nfstrail_events_filtered_total` - Total events filtered (UID/operation filters)
 - `nfstrail_events_dropped_total` - Total events dropped (buffer/rate limits)
 - `nfstrail_operations_total{operation}` - Operations by type (read, write, etc.)
+- `nfstrail_operations_failed_total{operation,error}` - Failed operations by type and error code (EACCES, ENOENT, etc.)
 - `nfstrail_bytes_read_total` - Total bytes read from NFS
 - `nfstrail_bytes_written_total` - Total bytes written to NFS
 - `nfstrail_cache_lookups_total{result}` - Cache lookups (hit/miss)
@@ -179,6 +180,21 @@ rate(nfstrail_bytes_read_total[5m]) + rate(nfstrail_bytes_written_total[5m])
 # Cache hit rate
 rate(nfstrail_cache_lookups_total{result="hit"}[5m]) /
 rate(nfstrail_cache_lookups_total[5m]) * 100
+
+# Failed operations rate (permission errors, file not found, etc.)
+rate(nfstrail_operations_failed_total[5m])
+
+# Top error types by frequency
+topk(5, rate(nfstrail_operations_failed_total[5m]))
+
+# Permission denied errors (potential scanning/unauthorized access attempts)
+rate(nfstrail_operations_failed_total{error="EACCES"}[5m])
+
+# File not found errors
+rate(nfstrail_operations_failed_total{error="ENOENT"}[5m])
+
+# Disk quota exceeded errors
+rate(nfstrail_operations_failed_total{error="EDQUOT"}[5m])
 ```
 
 ## Usage

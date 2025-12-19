@@ -37,6 +37,15 @@ var (
 		[]string{"operation"},
 	)
 
+	// Failed operations by type and error code
+	OperationsFailed = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "nfstrail_operations_failed_total",
+			Help: "Total number of failed NFS operations by type and error code",
+		},
+		[]string{"operation", "error"},
+	)
+
 	// Bytes transferred
 	BytesRead = promauto.NewCounter(prometheus.CounterOpts{
 		Name: "nfstrail_bytes_read_total",
@@ -92,10 +101,36 @@ var (
 func RecordOperation(operation string, bytes int64) {
 	OperationsByType.WithLabelValues(operation).Inc()
 
+	// Track failed operations (negative return values are errors)
+	if bytes < 0 {
+		errorName := getErrorName(bytes)
+		OperationsFailed.WithLabelValues(operation, errorName).Inc()
+	}
+
 	if operation == "read" && bytes > 0 {
 		BytesRead.Add(float64(bytes))
 	} else if operation == "write" && bytes > 0 {
 		BytesWritten.Add(float64(bytes))
+	}
+}
+
+// getErrorName converts errno to string name
+func getErrorName(errno int64) string {
+	switch errno {
+	case -1:
+		return "EPERM"
+	case -2:
+		return "ENOENT"
+	case -13:
+		return "EACCES"
+	case -17:
+		return "EEXIST"
+	case -28:
+		return "ENOSPC"
+	case -122:
+		return "EDQUOT"
+	default:
+		return "OTHER"
 	}
 }
 
