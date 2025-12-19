@@ -218,8 +218,14 @@ sudo nfs-trail -config /etc/nfs-trail/nfs-trail.yaml
 Quick NFS troubleshooting without configuration file:
 
 ```bash
-# Human-readable output with statistics
-sudo nfs-trail -no-config -simple -stats
+# Debug specific user's NFS activity
+sudo nfs-trail -uid 1000 -simple
+
+# Quick debug session
+sudo nfs-trail -debug
+
+# Who is hammering the NFS server?
+sudo nfs-trail -simple -stats
 
 # Example output:
 # ──────────────────────────────────────────────────────────────────────────────
@@ -236,8 +242,11 @@ sudo nfs-trail -no-config -simple -stats
 # Show help
 ./nfs-trail -help
 
-# Show version
-./nfs-trail -version
+# Debug specific user
+sudo nfs-trail -uid 1000 -simple
+
+# Quick debug mode (enables -simple and -stats)
+sudo nfs-trail -debug
 
 # Use specific config with simple output
 sudo nfs-trail -config /tmp/debug.yaml -simple

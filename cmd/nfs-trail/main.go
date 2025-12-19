@@ -37,6 +37,9 @@ var (
     configPath = flag.String("config", "/etc/nfs-trail/nfs-trail.yaml", "")
     noConfig   = flag.Bool("no-config", false, "")
 
+    // Filtering
+    filterUID = flag.Int("uid", -1, "") // Filter to specific UID (-1 = disabled)
+
     // Output modes
     simpleOutput = flag.Bool("simple", false, "")
 
@@ -58,121 +61,65 @@ func printUsage() {
     fmt.Fprintf(os.Stderr, `
 ╔══════════════════════════════════════════════════════════════════════════════╗
 ║                              NFS TRAIL v%s                              ║
-║                                                                              ║
-║  A daemon for logging file operations on NFS-mounted filesystems using eBPF  ║
+║  Monitor NFS file operations using eBPF                                      ║
 ╚══════════════════════════════════════════════════════════════════════════════╝
 
-USAGE:
-    nfs-trail [OPTIONS]
+COMMON USAGE:
 
-DESCRIPTION:
-    NFS Trail monitors file access on NFS mounts at the kernel level using eBPF.
-    It captures read, write, and metadata operations, enriches them with user/group
-    information, and outputs structured logs suitable for security auditing.
+  Debug specific user's NFS activity:
+    sudo nfs-trail -uid 1000 -simple
 
-MODES:
+  Quick debug session (human-readable output):
+    sudo nfs-trail -debug
 
-    Production Mode (default):
-        sudo nfs-trail -config /etc/nfs-trail/nfs-trail.yaml
+  Production daemon with config:
+    sudo nfs-trail -config /etc/nfs-trail/nfs-trail.yaml
 
-        Uses configuration file to control filtering, aggregation, and output.
-        Suitable for long-running daemon with systemd integration.
-
-    Standalone Debug Mode:
-        sudo nfs-trail -no-config -simple -stats
-
-        Quick NFS troubleshooting without configuration file.
-        Human-readable output with real-time statistics.
+  Standalone without config:
+    sudo nfs-trail -no-config -simple -stats
 
 OPTIONS:
 
-  Configuration:
-    -config <path>
-        Path to YAML configuration file.
-        Default: /etc/nfs-trail/nfs-trail.yaml
+  -uid <uid>          Only show events from this UID (e.g., -uid 1000)
+  -simple             Human-readable output instead of JSON
+  -debug              Enable -simple and -stats (quick troubleshooting)
+  -stats              Print statistics every 10 seconds
 
-    -no-config
-        Run with built-in defaults, ignore configuration file.
-        Useful for quick debugging without creating config.
-        Default: false
+  -config <path>      Path to YAML config (default: /etc/nfs-trail/nfs-trail.yaml)
+  -no-config          Use built-in defaults, ignore config file
 
-  Output:
-    -simple
-        Use simple human-readable one-line output format.
-        Example: "14:23:45 ✓ read    espen (1000)  cat    /mnt/nfs/file.txt 4.2 KB"
-        Instead of JSON output.
-        Default: false (JSON output)
+  -version            Show version
+  -help               Show this help
 
-  Monitoring:
-    -debug
-        Debug mode: enables both -simple and -stats.
-        Useful for quick troubleshooting sessions.
-        Default: false
+EXAMPLE OUTPUT (with -simple):
 
-    -stats
-        Print statistics every 10 seconds (events received/processed/dropped).
-        Useful for monitoring system load and filter effectiveness.
-        Default: false
+  TIME     ✓ OP       USER             UID     PROCESS    PATH [BYTES/ERROR]
+  14:23:45 ✓ read     espen            (1000)  cat        /mnt/nfs/file.txt 4.2 KB
+  14:23:47 ✗ open     alice            (1001)  vim        /mnt/nfs/secret [EACCES]
+  14:23:50 ✓ write    bob              (1002)  rsync      /mnt/nfs/data.tar 128.5 MB
 
-  Information:
-    -version
-        Show version information and exit.
+REAL-WORLD EXAMPLES:
 
-    -help
-        Show this help message and exit.
+  # "Who is hammering the NFS server?"
+  sudo nfs-trail -simple -stats
 
-EXAMPLES:
+  # "What is user 1000 doing on NFS?"
+  sudo nfs-trail -uid 1000 -simple
 
-    # Production use with systemd
-    sudo systemctl start nfs-trail
+  # "Debug with existing config, readable output"
+  sudo nfs-trail -debug -config /etc/nfs-trail/nfs-trail.yaml
 
-    # Quick debugging session (legacy -debug flag)
-    sudo nfs-trail -debug -config /tmp/nfs-trail.yaml
-
-    # Quick debugging session (no config needed)
-    sudo nfs-trail -no-config -simple -stats
-
-    # Monitor specific config with human-readable output
-    sudo nfs-trail -config /tmp/my-config.yaml -simple
-
-    # Test with built-in defaults, JSON output
-    sudo nfs-trail -no-config
+  # "Monitor and save to file" (requires config with output.type: file)
+  sudo nfs-trail -config /etc/nfs-trail/nfs-trail.yaml
 
 REQUIREMENTS:
-
-    Runtime:
-        • Linux kernel 5.8+ with BTF enabled
-        • Root privileges or CAP_BPF + CAP_PERFMON capabilities
-        • Active NFS mounts (v3 or v4)
-
-    Tested Platforms:
-        • RHEL 9.x (kernel 5.14+)
-        • Ubuntu 24.04 (kernel 6.8+)
-
-CONFIGURATION:
-
-    When using -config, the YAML file controls:
-        • Which NFS mounts to monitor (all or specific paths)
-        • UID/operation filtering (include/exclude rules)
-        • Event aggregation (reduce log volume)
-        • Output destination (file with rotation, stdout, journald)
-        • Performance tuning (buffers, rate limits)
-        • Prometheus metrics endpoint
-
-    See /etc/nfs-trail/nfs-trail.yaml.example for full options.
-
-    When using -no-config, sensible defaults are used:
-        • Monitor all NFS mounts
-        • Filter root (UID 0) and nobody (UID 65534)
-        • Include UIDs 1000-60000
-        • Enable event aggregation (500ms window)
-        • Output to stdout (JSON format, or simple if -simple flag)
+  • Linux kernel 5.8+ with BTF (/sys/kernel/btf/vmlinux exists)
+  • Root or CAP_BPF + CAP_PERFMON capabilities
+  • Active NFS mounts (NFSv3 or NFSv4)
+  • Tested: RHEL 9.x, Ubuntu 24.04
 
 MORE INFO:
-
-    GitHub:  https://github.com/espegro/nfs-trail
-    Docs:    https://github.com/espegro/nfs-trail/blob/main/README.md
-    Issues:  https://github.com/espegro/nfs-trail/issues
+  https://github.com/espegro/nfs-trail
 
 `, version)
 }
@@ -218,6 +165,15 @@ func main() {
         cfg.Performance.StatsIntervalSec = 10
     }
 
+    // Apply UID filter if specified
+    if *filterUID >= 0 {
+        // Override config to only include this specific UID
+        cfg.Filters.IncludeUIDs = []uint32{uint32(*filterUID)}
+        cfg.Filters.ExcludeUIDs = []uint32{}
+        cfg.Filters.IncludeUIDRanges = []config.UIDRange{}
+        cfg.Filters.ExcludeUIDRanges = []config.UIDRange{}
+    }
+
     // Initialize logging with configured level and output
     if err := setupLogging(cfg.Logging.Level, cfg.Logging.Output); err != nil {
         log.Fatalf("[ERROR] Failed to setup logging: %v", err)
@@ -228,6 +184,11 @@ func main() {
         logger.Info("Configuration: built-in defaults")
     } else {
         logger.Debug("Configuration loaded from %s", *configPath)
+    }
+
+    // Log UID filter if specified
+    if *filterUID >= 0 {
+        logger.Info("⚠️  Filtering to UID %d only (all other UIDs ignored)", *filterUID)
     }
 
     // Start Prometheus metrics server if enabled
