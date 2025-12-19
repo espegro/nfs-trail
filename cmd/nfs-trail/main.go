@@ -2,6 +2,7 @@ package main
 
 import (
     "flag"
+    "fmt"
     "log"
     "os"
     "os/signal"
@@ -21,6 +22,8 @@ import (
     "github.com/espegro/nfs-trail/internal/types"
 )
 
+const version = "0.1.0"
+
 // Stats tracks event processing statistics
 type Stats struct {
     EventsReceived  uint64
@@ -30,19 +33,174 @@ type Stats struct {
 }
 
 var (
-    configPath = flag.String("config", "/etc/nfs-trail/nfs-trail.yaml", "Path to configuration file")
-    debug      = flag.Bool("debug", false, "Enable debug mode (stdout output regardless of config)")
+    // Configuration
+    configPath = flag.String("config", "/etc/nfs-trail/nfs-trail.yaml", "")
+    noConfig   = flag.Bool("no-config", false, "")
+
+    // Output modes
+    simpleOutput = flag.Bool("simple", false, "")
+
+    // Debug options
+    showStats = flag.Bool("stats", false, "")
+
+    // Info
+    showVersion = flag.Bool("version", false, "")
+    showHelp    = flag.Bool("help", false, "")
 )
+
+func init() {
+    // Custom usage function
+    flag.Usage = printUsage
+}
+
+func printUsage() {
+    fmt.Fprintf(os.Stderr, `
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                              NFS TRAIL v%s                              ║
+║                                                                              ║
+║  A daemon for logging file operations on NFS-mounted filesystems using eBPF  ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+USAGE:
+    nfs-trail [OPTIONS]
+
+DESCRIPTION:
+    NFS Trail monitors file access on NFS mounts at the kernel level using eBPF.
+    It captures read, write, and metadata operations, enriches them with user/group
+    information, and outputs structured logs suitable for security auditing.
+
+MODES:
+
+    Production Mode (default):
+        sudo nfs-trail -config /etc/nfs-trail/nfs-trail.yaml
+
+        Uses configuration file to control filtering, aggregation, and output.
+        Suitable for long-running daemon with systemd integration.
+
+    Standalone Debug Mode:
+        sudo nfs-trail -no-config -simple -stats
+
+        Quick NFS troubleshooting without configuration file.
+        Human-readable output with real-time statistics.
+
+OPTIONS:
+
+  Configuration:
+    -config <path>
+        Path to YAML configuration file.
+        Default: /etc/nfs-trail/nfs-trail.yaml
+
+    -no-config
+        Run with built-in defaults, ignore configuration file.
+        Useful for quick debugging without creating config.
+        Default: false
+
+  Output:
+    -simple
+        Use simple human-readable one-line output format.
+        Example: "14:23:45 ✓ read    espen (1000)  cat    /mnt/nfs/file.txt 4.2 KB"
+        Instead of JSON output.
+        Default: false (JSON output)
+
+  Monitoring:
+    -stats
+        Print statistics every 10 seconds (events received/processed/dropped).
+        Useful for monitoring system load and filter effectiveness.
+        Default: false
+
+  Information:
+    -version
+        Show version information and exit.
+
+    -help
+        Show this help message and exit.
+
+EXAMPLES:
+
+    # Production use with systemd
+    sudo systemctl start nfs-trail
+
+    # Quick debugging session (no config needed)
+    sudo nfs-trail -no-config -simple -stats
+
+    # Monitor specific config with human-readable output
+    sudo nfs-trail -config /tmp/my-config.yaml -simple
+
+    # Test with built-in defaults, JSON output
+    sudo nfs-trail -no-config
+
+REQUIREMENTS:
+
+    Runtime:
+        • Linux kernel 5.8+ with BTF enabled
+        • Root privileges or CAP_BPF + CAP_PERFMON capabilities
+        • Active NFS mounts (v3 or v4)
+
+    Tested Platforms:
+        • RHEL 9.x (kernel 5.14+)
+        • Ubuntu 24.04 (kernel 6.8+)
+
+CONFIGURATION:
+
+    When using -config, the YAML file controls:
+        • Which NFS mounts to monitor (all or specific paths)
+        • UID/operation filtering (include/exclude rules)
+        • Event aggregation (reduce log volume)
+        • Output destination (file with rotation, stdout, journald)
+        • Performance tuning (buffers, rate limits)
+        • Prometheus metrics endpoint
+
+    See /etc/nfs-trail/nfs-trail.yaml.example for full options.
+
+    When using -no-config, sensible defaults are used:
+        • Monitor all NFS mounts
+        • Filter root (UID 0) and nobody (UID 65534)
+        • Include UIDs 1000-60000
+        • Enable event aggregation (500ms window)
+        • Output to stdout (JSON format, or simple if -simple flag)
+
+MORE INFO:
+
+    GitHub:  https://github.com/espegro/nfs-trail
+    Docs:    https://github.com/espegro/nfs-trail/blob/main/README.md
+    Issues:  https://github.com/espegro/nfs-trail/issues
+
+`, version)
+}
 
 func main() {
     flag.Parse()
 
+    // Handle version flag
+    if *showVersion {
+        fmt.Printf("nfs-trail version %s\n", version)
+        os.Exit(0)
+    }
+
+    // Handle help flag
+    if *showHelp {
+        printUsage()
+        os.Exit(0)
+    }
+
     log.Println("NFS Trail - Starting up...")
 
-    // Load configuration
-    cfg, err := loadConfiguration(*configPath)
-    if err != nil {
-        log.Fatalf("[ERROR] Failed to load configuration: %v", err)
+    // Load configuration based on flags
+    var cfg *config.Config
+    if *noConfig {
+        log.Println("Using built-in default configuration (-no-config)")
+        cfg = config.DefaultConfig()
+    } else {
+        var err error
+        cfg, err = loadConfiguration(*configPath)
+        if err != nil {
+            log.Fatalf("[ERROR] Failed to load configuration: %v", err)
+        }
+    }
+
+    // Apply flag overrides to config
+    if *showStats {
+        cfg.Performance.StatsIntervalSec = 10
     }
 
     // Initialize logging with configured level and output
@@ -51,7 +209,11 @@ func main() {
     }
 
     logger.Info("NFS Trail daemon starting...")
-    logger.Debug("Configuration loaded from %s", *configPath)
+    if *noConfig {
+        logger.Info("Configuration: built-in defaults")
+    } else {
+        logger.Debug("Configuration loaded from %s", *configPath)
+    }
 
     // Start Prometheus metrics server if enabled
     var metricsServer *metrics.Server
@@ -142,11 +304,20 @@ func main() {
         os.Exit(1)
     }
 
-    // Create output logger based on configuration
+    // Create output logger based on configuration and flags
     var outputLogger output.Logger
-    if *debug || cfg.Output.Type == "stdout" || cfg.Output.Type == "" {
+    if *simpleOutput {
+        // Simple human-readable output (overrides config)
+        outputLogger = output.NewSimpleLogger()
+        logger.Info("Output: simple (human-readable one-line format)")
+        // Disable aggregation for simple output (makes more sense)
+        if cfg.Aggregation.Enabled {
+            logger.Info("Note: Aggregation disabled for simple output mode")
+            cfg.Aggregation.Enabled = false
+        }
+    } else if cfg.Output.Type == "stdout" || cfg.Output.Type == "" {
         outputLogger = output.NewStdoutLogger()
-        logger.Info("Output: stdout")
+        logger.Info("Output: stdout (JSON)")
     } else if cfg.Output.Type == "file" {
         fileLogger, err := output.NewFileLogger(output.FileLoggerConfig{
             Path:       cfg.Output.File.Path,
@@ -157,7 +328,7 @@ func main() {
         })
         if err != nil {
             logger.Error("Failed to create file logger: %v", err)
-        os.Exit(1)
+            os.Exit(1)
         }
         outputLogger = fileLogger
         logger.Info("Output: file (%s, max %dMB, %d backups)",
@@ -346,7 +517,8 @@ func loadConfiguration(path string) (*config.Config, error) {
     cfg, err := config.LoadConfig(path)
     if err != nil {
         if os.IsNotExist(err) {
-            logger.Info("Config file not found at %s, using defaults", path)
+            // Use log instead of logger (not initialized yet)
+            log.Printf("Config file not found at %s, using defaults", path)
             return config.DefaultConfig(), nil
         }
         return nil, err

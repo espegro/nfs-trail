@@ -8,17 +8,17 @@ nfs-trail monitors file access on NFS mounts at the kernel level using eBPF kpro
 
 ## Features
 
-- Monitors NFSv3 and NFSv4 mounts
-- Captures: read, write, open, close, stat, chmod, chown, rename, delete, mkdir, rmdir, symlink, link, setxattr, truncate
-- Tracks actual bytes read/written and file truncation
-- Event aggregation reduces log volume
-- User/group name resolution with caching
-- Configurable UID and operation filtering
-- JSON output (ECS-aligned) to file or stdout
-- Log rotation support
-- Rate limiting with configurable drop policies
-- Prometheus metrics endpoint for monitoring
-- Portable binary via BPF CO-RE
+- **Standalone debug mode**: Run without config for quick NFS troubleshooting
+- **Monitors NFSv3 and NFSv4 mounts** at kernel level
+- **Captures 15 operation types**: read, write, open, close, stat, chmod, chown, rename, delete, mkdir, rmdir, symlink, link, setxattr, truncate
+- **Tracks bytes and errors**: Actual bytes read/written, file truncation, and operation failures
+- **Event aggregation**: Reduces log volume by 10-100x
+- **User/group resolution**: Cached lookups with configurable TTL
+- **Flexible filtering**: UID ranges and operation type filters
+- **Multiple output formats**: JSON (ECS-aligned), human-readable one-liner, or file with rotation
+- **Prometheus metrics**: Failed operations, throughput, cache hit rate
+- **Safe defaults**: Works out-of-the-box for debugging
+- **Portable binary**: BPF CO-RE for kernel compatibility
 
 ## Requirements
 
@@ -199,14 +199,54 @@ rate(nfstrail_operations_failed_total{error="EDQUOT"}[5m])
 
 ## Usage
 
-```
-# Manual
-sudo nfs-trail -config /etc/nfs-trail/nfs-trail.yaml
+### Production Mode
 
-# Systemd
+For long-running daemon with systemd:
+
+```bash
+# Start with systemd
 sudo systemctl start nfs-trail
 sudo systemctl status nfs-trail
 journalctl -u nfs-trail -f
+
+# Or manually with config
+sudo nfs-trail -config /etc/nfs-trail/nfs-trail.yaml
+```
+
+### Standalone Debug Mode
+
+Quick NFS troubleshooting without configuration file:
+
+```bash
+# Human-readable output with statistics
+sudo nfs-trail -no-config -simple -stats
+
+# Example output:
+# ──────────────────────────────────────────────────────────────────────────────
+# TIME     ✓ OP       USER             UID     PROCESS    PATH [BYTES/ERROR]
+# ──────────────────────────────────────────────────────────────────────────────
+# 14:23:45 ✓ read     espen            (1000)  cat        /mnt/nfs/data/file.txt 4.2 KB
+# 14:23:47 ✗ open     alice            (1001)  vim        /mnt/nfs/docs/secret.doc [EACCES]
+# 14:23:50 ✓ write    bob              (1002)  rsync      /mnt/nfs/backup/data.tar 128.5 MB
+```
+
+### Command-Line Options
+
+```bash
+# Show help
+./nfs-trail -help
+
+# Show version
+./nfs-trail -version
+
+# Use specific config with simple output
+sudo nfs-trail -config /tmp/debug.yaml -simple
+
+# Built-in defaults, JSON output
+sudo nfs-trail -no-config
+
+# Enable statistics (prints every 10 seconds)
+sudo nfs-trail -stats
 ```
 
 ## Output Format
