@@ -15,6 +15,7 @@ import (
     "github.com/espegro/nfs-trail/internal/ebpf"
     "github.com/espegro/nfs-trail/internal/enrichment"
     "github.com/espegro/nfs-trail/internal/logger"
+    "github.com/espegro/nfs-trail/internal/metrics"
     "github.com/espegro/nfs-trail/internal/mounts"
     "github.com/espegro/nfs-trail/internal/output"
     "github.com/espegro/nfs-trail/internal/types"
@@ -52,6 +53,17 @@ func main() {
     logger.Info("NFS Trail daemon starting...")
     logger.Debug("Configuration loaded from %s", *configPath)
 
+    // Start Prometheus metrics server if enabled
+    var metricsServer *metrics.Server
+    if cfg.Metrics.Enabled {
+        metricsServer = metrics.NewServer(cfg.Metrics.Port)
+        if err := metricsServer.Start(); err != nil {
+            logger.Error("Failed to start metrics server: %v", err)
+            os.Exit(1)
+        }
+        logger.Info("Metrics server enabled on port %d", cfg.Metrics.Port)
+    }
+
     // Create eBPF monitor first (needed for mount watcher callback)
     logger.Info("Loading eBPF programs...")
     monitor, err := ebpf.NewMonitor()
@@ -75,6 +87,7 @@ func main() {
             logger.Info("Error updating NFS mounts map: %v", err)
         } else {
             logger.Info("Updated NFS mount filters (%d mounts)", len(newMounts))
+            metrics.MountsMonitored.Set(float64(len(newMounts)))
         }
     })
 
@@ -110,6 +123,7 @@ func main() {
         logger.Error("Failed to update NFS mounts map: %v", err)
         os.Exit(1)
     }
+    metrics.MountsMonitored.Set(float64(len(nfsMounts)))
 
     // Note: UID filtering is done in userspace (not eBPF) to support large ranges
     logger.Info("UID filtering configured (userspace)")
@@ -195,16 +209,19 @@ func main() {
         defer wg.Done()
         for event := range eventChan {
             atomic.AddUint64(&stats.EventsReceived, 1)
+            metrics.EventsReceived.Inc()
 
             // Apply UID filtering (userspace)
             if cfg.ShouldFilterUID(event.UID) {
                 atomic.AddUint64(&stats.EventsFiltered, 1)
+                metrics.EventsFiltered.Inc()
                 continue // Skip this event
             }
 
             // Apply operation filtering
             if cfg.ShouldFilterOperation(event.Operation.String()) {
                 atomic.AddUint64(&stats.EventsFiltered, 1)
+                metrics.EventsFiltered.Inc()
                 continue // Skip this event
             }
 
@@ -215,17 +232,23 @@ func main() {
             event.Username = userGroupCache.GetUsername(event.UID)
             event.Groupname = userGroupCache.GetGroupname(event.GID)
 
+            // Record operation metrics (ReturnValue contains bytes for read/write)
+            metrics.RecordOperation(event.Operation.String(), event.ReturnValue)
+
             // Send to aggregator or directly to output (non-blocking)
             if cfg.Aggregation.Enabled {
                 agg.ProcessEvent(event)
                 atomic.AddUint64(&stats.EventsProcessed, 1)
+                metrics.EventsProcessed.Inc()
             } else {
                 select {
                 case outputChan <- event:
                     atomic.AddUint64(&stats.EventsProcessed, 1)
+                    metrics.EventsProcessed.Inc()
                 default:
                     // Channel full, drop event
                     atomic.AddUint64(&stats.EventsDropped, 1)
+                    metrics.EventsDropped.Inc()
                 }
             }
         }
@@ -302,6 +325,13 @@ func main() {
     // Wait for goroutines to finish processing remaining events
     logger.Info("Waiting for event processors to finish...")
     wg.Wait()
+
+    // Stop metrics server if running
+    if metricsServer != nil {
+        if err := metricsServer.Stop(); err != nil {
+            logger.Warn("Error stopping metrics server: %v", err)
+        }
+    }
 
     // Print final stats
     log.Printf("Final stats: received=%d processed=%d filtered=%d dropped=%d",

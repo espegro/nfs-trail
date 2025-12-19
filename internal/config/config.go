@@ -15,6 +15,7 @@ type Config struct {
     Output      OutputConfig      `yaml:"output"`
     Performance PerformanceConfig `yaml:"performance"`
     Logging     LoggingConfig     `yaml:"logging"`
+    Metrics     MetricsConfig     `yaml:"metrics"`
 }
 
 // MountsConfig specifies which NFS mounts to monitor
@@ -92,6 +93,12 @@ type LoggingConfig struct {
     Output string `yaml:"output"` // stdout, stderr, file
 }
 
+// MetricsConfig for Prometheus metrics
+type MetricsConfig struct {
+    Enabled bool `yaml:"enabled"` // Enable Prometheus metrics endpoint
+    Port    int  `yaml:"port"`    // HTTP port for /metrics endpoint
+}
+
 // DefaultConfig returns a default configuration
 func DefaultConfig() *Config {
     return &Config{
@@ -140,6 +147,10 @@ func DefaultConfig() *Config {
         Logging: LoggingConfig{
             Level:  "info",
             Output: "stdout",
+        },
+        Metrics: MetricsConfig{
+            Enabled: false,
+            Port:    9090,
         },
     }
 }

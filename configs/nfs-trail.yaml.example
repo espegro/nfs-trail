@@ -114,3 +114,12 @@ performance:
 logging:
   level: info  # debug, info, warn, error
   output: stdout
+
+# Prometheus metrics endpoint
+metrics:
+  # Enable Prometheus metrics HTTP endpoint
+  enabled: false
+
+  # Port for /metrics endpoint (Prometheus scraping)
+  # Default: 9090
+  port: 9090

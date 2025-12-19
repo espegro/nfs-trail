@@ -8,6 +8,7 @@ import (
     "time"
 
     lru "github.com/hashicorp/golang-lru/v2"
+    "github.com/espegro/nfs-trail/internal/metrics"
 )
 
 // UserGroupCache caches username and groupname lookups with LRU eviction
@@ -46,12 +47,14 @@ func (c *UserGroupCache) GetUsername(uid uint32) string {
     if entry, ok := c.userCache.Get(uid); ok {
         if time.Since(entry.timestamp) < c.ttl {
             c.mu.RUnlock()
+            metrics.RecordCacheHit()
             return entry.name
         }
     }
     c.mu.RUnlock()
 
-    // Lookup from system
+    // Cache miss - lookup from system
+    metrics.RecordCacheMiss()
     u, err := user.LookupId(strconv.FormatUint(uint64(uid), 10))
     if err != nil {
         // Cache the failure too
@@ -83,12 +86,14 @@ func (c *UserGroupCache) GetGroupname(gid uint32) string {
     if entry, ok := c.groupCache.Get(gid); ok {
         if time.Since(entry.timestamp) < c.ttl {
             c.mu.RUnlock()
+            metrics.RecordCacheHit()
             return entry.name
         }
     }
     c.mu.RUnlock()
 
-    // Lookup from system
+    // Cache miss - lookup from system
+    metrics.RecordCacheMiss()
     g, err := user.LookupGroupId(strconv.FormatUint(uint64(gid), 10))
     if err != nil {
         // Cache the failure too

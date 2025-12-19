@@ -16,6 +16,8 @@ nfs-trail monitors file access on NFS mounts at the kernel level using eBPF kpro
 - Configurable UID and operation filtering
 - JSON output (ECS-aligned) to file or stdout
 - Log rotation support
+- Rate limiting with configurable drop policies
+- Prometheus metrics endpoint for monitoring
 - Portable binary via BPF CO-RE
 
 ## Requirements
@@ -131,6 +133,53 @@ performance:
   - **Critical for audit trail** - you must know when data is lost
 - `drop_stats_interval_sec`: Log drop statistics every N seconds (default: 30)
   - Shows drop rate percentage for monitoring
+
+**metrics (Prometheus integration)**
+- `enabled`: Enable Prometheus metrics HTTP endpoint (default: false)
+- `port`: HTTP port for /metrics endpoint (default: 9090)
+
+### Prometheus Metrics
+
+When enabled, nfs-trail exposes Prometheus metrics on `http://localhost:9090/metrics`.
+
+**Available metrics:**
+- `nfstrail_events_received_total` - Total events received from eBPF
+- `nfstrail_events_processed_total` - Total events successfully processed
+- `nfstrail_events_filtered_total` - Total events filtered (UID/operation filters)
+- `nfstrail_events_dropped_total` - Total events dropped (buffer/rate limits)
+- `nfstrail_operations_total{operation}` - Operations by type (read, write, etc.)
+- `nfstrail_bytes_read_total` - Total bytes read from NFS
+- `nfstrail_bytes_written_total` - Total bytes written to NFS
+- `nfstrail_cache_lookups_total{result}` - Cache lookups (hit/miss)
+- `nfstrail_mounts_monitored` - Number of NFS mounts currently monitored
+- `nfstrail_event_processing_duration_seconds` - Event processing latency histogram
+
+**Example Prometheus scrape config:**
+```yaml
+scrape_configs:
+  - job_name: 'nfs-trail'
+    static_configs:
+      - targets: ['localhost:9090']
+```
+
+**Example queries:**
+```
+# Event throughput (events/sec)
+rate(nfstrail_events_received_total[5m])
+
+# Drop rate percentage
+rate(nfstrail_events_dropped_total[5m]) / rate(nfstrail_events_received_total[5m]) * 100
+
+# Top operations by frequency
+topk(5, rate(nfstrail_operations_total[5m]))
+
+# NFS bandwidth (bytes/sec)
+rate(nfstrail_bytes_read_total[5m]) + rate(nfstrail_bytes_written_total[5m])
+
+# Cache hit rate
+rate(nfstrail_cache_lookups_total{result="hit"}[5m]) /
+rate(nfstrail_cache_lookups_total[5m]) * 100
+```
 
 ## Usage
 
