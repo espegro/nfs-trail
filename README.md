@@ -40,9 +40,28 @@ nfs-trail monitors file access on NFS mounts at the kernel level using eBPF kpro
 - RHEL 9.x (kernel 5.14+)
 - Ubuntu 24.04 (kernel 6.8+)
 
-## Building
+## Download Pre-built Binary
 
+**Latest Release: v0.5.0**
+
+```bash
+# Download binary
+wget https://github.com/espegro/nfs-trail/raw/main/releases/v0.5.0/nfs-trail-v0.5.0-linux-amd64
+
+# Verify checksum
+wget https://github.com/espegro/nfs-trail/raw/main/releases/v0.5.0/nfs-trail-v0.5.0-linux-amd64.sha256
+sha256sum -c nfs-trail-v0.5.0-linux-amd64.sha256
+
+# Install
+chmod +x nfs-trail-v0.5.0-linux-amd64
+sudo mv nfs-trail-v0.5.0-linux-amd64 /usr/local/bin/nfs-trail
 ```
+
+See [releases/v0.5.0/](releases/v0.5.0/) for more details.
+
+## Building from Source
+
+```bash
 make clean && make
 ```
 
